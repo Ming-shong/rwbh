@@ -30,6 +30,8 @@ map.on("mousemove", e => {
 map.on("click", e => {
   if (window.GPS_ACTIVE) return;
   STATE.setPlayerPos(e.latlng.lat, e.latlng.lng);
+  // 玩家移動後清除所有路線
+  _clearAllRoutes();
 });
 
 // ── 玩家標記 ────────────────────────────────────────────────────────────────
@@ -195,12 +197,20 @@ function buildPopupHTML(poi) {
   return `
 <div class="event-card">
   <div class="card-badge ${poi.type}">${defeated ? "✓ 已擊敗" : (isBoss ? "BOSS EVENT" : "MOB EVENT")}</div>
-  <div class="card-name">${displayName}</div>
+  <div class="card-name" style="color:${color}">${displayName}</div>
+
+  <!-- 地點資訊區（藍色風格） -->
+  <div style="background:rgba(30,144,255,.08);border:1px solid rgba(30,144,255,.35);border-radius:4px;padding:7px 10px;margin-bottom:8px;color:#7ec8ff">
+    <div style="font-size:8px;color:rgba(30,144,255,.7);letter-spacing:1px;margin-bottom:5px">📍 地點資訊</div>
+    <div class="card-row"><span class="ck" style="color:rgba(30,144,255,.6)">地標</span><span class="cv" style="color:#7ec8ff;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${poi.name}">${poi.name}</span></div>
+    <div class="card-row"><span class="ck" style="color:rgba(30,144,255,.6)">類型</span><span class="cv" style="color:#7ec8ff">${poi.category}</span></div>
+    <div class="card-row"><span class="ck" style="color:rgba(30,144,255,.6)">距離</span><span class="cv" style="color:#7ec8ff">${liveDist ?? "—"} m</span></div>
+    <div class="card-row"><span class="ck" style="color:rgba(30,144,255,.6)">步行</span><span class="cv" style="color:#7ec8ff">🚶 ${walkMin}</span></div>
+  </div>
+
+  <!-- 戰鬥資訊區 -->
   <div class="card-stats">
-    <div class="card-row"><span class="ck">地標</span><span class="cv">${poi.name}</span></div>
-    <div class="card-row"><span class="ck">類型</span><span class="cv">${poi.category}</span></div>
-    <div class="card-row"><span class="ck">距離</span><span class="cv">${liveDist ?? "—"} m</span></div>
-    <div class="card-row"><span class="ck">步行</span><span class="cv">🚶 ${walkMin}</span></div>
+    <div style="font-size:8px;color:var(--muted);letter-spacing:1px;margin-bottom:5px">⚔ 戰鬥資訊</div>
     <div class="card-row"><span class="ck">危險</span><span class="cv" style="color:${color}">■ ${THREAT_LABELS[threat] ?? "?"} (Lv.${threat})</span></div>
     ${isBoss
       ? `<div class="card-row"><span class="ck">Boss HP</span><span class="cv">${poi.boss_hp ?? "—"}</span></div>`
@@ -341,6 +351,11 @@ function onBattle(poiId) {
   const poi = poiDataMap[poiId];
   if (!poi) { window.HUD?.toast("找不到事件資料"); return; }
   if (poi.defeated) { window.HUD?.toast("此事件已擊敗"); return; }
+  if (STATE.player.hp <= 0) {
+    window.HUD?.toast('HP 為零，無法出戰！', 2000);
+    window.showRevivalModal?.();
+    return;
+  }
 
   if (poi.type === 'boss') {
     const threat      = poi.effective_threat || poi.threat;
@@ -425,3 +440,30 @@ document.addEventListener("poiDefeated", e => {
     m.setPopupContent(buildPopupHTML(poi));
   });
 });
+
+// ── 清除所有路線（供外部呼叫）────────────────────────────────────────────────
+async function _refreshOpenPopupRoute() {
+  if (!_openPopupPoi || !STATE.player.lat) return;
+  const poi = _openPopupPoi;
+  _openPopupMarker?.setPopupContent(buildPopupHTML(poi));
+  try {
+    const r = await fetch(`/api/route?lat1=${STATE.player.lat}&lng1=${STATE.player.lng}&lat2=${poi.lat}&lng2=${poi.lng}`);
+    const d = await r.json();
+    if (d.ok && d.geometry) _setRoutePolyline(poi.id, d.geometry);
+  } catch(_) {}
+}
+window.MAP.refreshOpenPopupRoute = _refreshOpenPopupRoute;
+
+function _clearAllRoutes() {
+  // 清除 POI 路線
+  Object.values(routePolylineMap).forEach(p => map.removeLayer(p));
+  Object.keys(routePolylineMap).forEach(k => delete routePolylineMap[k]);
+  _openPopupMarker = null;
+  _openPopupPoi    = null;
+  // 清除飛往目的地路線（由 index.html 管理）
+  if (window._destRoutePolyline) {
+    map.removeLayer(window._destRoutePolyline);
+    window._destRoutePolyline = null;
+  }
+}
+window.MAP.clearAllRoutes = _clearAllRoutes;

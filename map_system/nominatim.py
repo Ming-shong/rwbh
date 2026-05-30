@@ -115,6 +115,7 @@ def geocode(place: str) -> dict | None:
         "format": "json",
         "limit": 1,
         "accept-language": "zh-TW,zh",
+        "countrycodes": "tw",
     }
     try:
         resp = requests.get(

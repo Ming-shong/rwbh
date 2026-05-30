@@ -52,9 +52,24 @@ window.INVENTORY = (() => {
 
   // ── UI ──────────────────────────────────────────────────────────────────────
 
+  let _currentTab = 'weapon';
+
+  function switchTab(tab) {
+    _currentTab = tab;
+    document.querySelectorAll('[data-inv-tab]').forEach(b => {
+      const active = b.dataset.invTab === tab;
+      b.style.borderBottomColor = active ? 'var(--accent)' : 'transparent';
+      b.style.color = active ? 'var(--accent)' : 'var(--muted)';
+    });
+    document.getElementById('inventory-weapon-panel').style.display = tab === 'weapon' ? '' : 'none';
+    document.getElementById('inventory-item-panel').style.display   = tab === 'item'   ? '' : 'none';
+    if (tab === 'item') _renderItems();
+  }
+
   function openModal() {
     document.getElementById('inventory-modal').style.display = 'flex';
     _renderModal();
+    if (_currentTab === 'item') _renderItems();
   }
 
   function closeModal() {
@@ -102,5 +117,37 @@ window.INVENTORY = (() => {
     `;
   }
 
-  return { own, isOwned, equip, getEquipped, getActiveWeapon, openModal, closeModal, resetAll };
+  function _renderItems() {
+    const el = document.getElementById('inventory-item-list');
+    if (!el) return;
+    const DEFS = window.ITEM_DEFS_MAP || {};
+    const hp = STATE?.player?.hp ?? 100;
+    const maxHp = STATE?.player?.maxHp ?? 100;
+
+    const rows = Object.values(DEFS).map(def => {
+      const count = window.ITEMS?.count(def.id) || 0;
+      // 使用限制：revive_syringe 不可在此使用；heal_potion 須 hp>0 且未滿
+      const canUse = def.id === 'heal_potion' && count > 0 && hp > 0 && hp < maxHp;
+      const hint   = def.id === 'revive_syringe' ? '<span style="font-size:9px;color:var(--muted)">HP=0 時觸發</span>' : '';
+      const useBtn = canUse ? `<button class="shop-btn equip-btn" onclick="SHOP.useItem('${def.id}');INVENTORY.refresh()">使用</button>` : '';
+      return `<div class="shop-card">
+        <div class="shop-card-header">
+          <span class="shop-icon" style="color:${def.color}">${def.icon}</span>
+          <div>
+            <div class="shop-name">${def.name} <span style="font-size:9px;color:var(--muted)">×${count}</span></div>
+            <div class="shop-desc">${def.desc}</div>
+          </div>
+        </div>
+        ${count > 0 ? `<div class="shop-footer" style="justify-content:flex-end;gap:6px">${hint}${useBtn}</div>` : ''}
+      </div>`;
+    });
+
+    el.innerHTML = rows.length
+      ? rows.join('')
+      : '<div style="color:var(--muted);text-align:center;padding:20px">背包是空的</div>';
+  }
+
+  function refresh() { _renderModal(); if (_currentTab === 'item') _renderItems(); }
+
+  return { own, isOwned, equip, getEquipped, getActiveWeapon, openModal, closeModal, resetAll, switchTab, refresh };
 })();

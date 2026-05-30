@@ -60,6 +60,8 @@ window.TRANSITION = (() => {
       window.HUD?.toast(`⚔ 勝利！◈ ×${result.crystals}${bonusStr}`, 3000);
     } else if (result && !result.won) {
       window.HUD?.toast('撤退... 重新整備再挑戰', 2200);
+      // 強制觸發 hpChanged，讓主畫面感知 HP=0 並彈出復活畫面
+      STATE.setHp(STATE.player.hp);
     }
 
     // 標記 POI 已擊敗（灰化標記）
@@ -69,9 +71,13 @@ window.TRANSITION = (() => {
 
     // 寫入記憶體統計（重整即歸零）
     if (result?.poi_id) {
-      window._SESSION_STATS = window._SESSION_STATS || { battles:0, wins:0, crystals:0, defeated:0 };
+      window._SESSION_STATS = window._SESSION_STATS || { battles:0, wins:0, crystals:0, defeated_mob:0, defeated_boss:0 };
       window._SESSION_STATS.battles++;
-      if (result.won) { window._SESSION_STATS.wins++; window._SESSION_STATS.defeated++; }
+      if (result.won) {
+        window._SESSION_STATS.wins++;
+        if (result.type === 'boss') window._SESSION_STATS.defeated_boss++;
+        else window._SESSION_STATS.defeated_mob++;
+      }
       window._SESSION_STATS.crystals += result.crystals || 0;
       window.updateStatsBar?.();
       window.dispatchEvent(new Event('rwbh_stats_updated'));

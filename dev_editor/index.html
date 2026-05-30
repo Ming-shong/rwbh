@@ -331,39 +331,36 @@ const TABS = {
     const key = `threat_${poi.threat}`;
     const phases = DESIGN.patterns[key] || [];
     const movementType = DESIGN.visuals?.boss_movement?.[poi.threat]?.type || 'wobble';
-
-    const bossMovementHTML = poi.type === 'boss' ? `
-      <div class="section-title" style="margin-top:16px">Boss 移動方式</div>
-      <div class="form-row">
-        <label class="form-label">移動類型</label>
-        <select class="form-select" onchange="ED.setBossMovement(${poi.threat},'type',this.value)" style="flex:none;width:130px">
-          ${['wobble','circular','figure8','track_player_x','static'].map(t=>`<option value="${t}" ${movementType===t?'selected':''}>${{wobble:'正弦擺動',circular:'圓形軌道',figure8:'8字形',track_player_x:'跟隨玩家X',static:'固定靜止'}[t]}</option>`).join('')}
-        </select>
-      </div>` : '';
+    const MOVE_LABELS = {wobble:'正弦擺動',circular:'圓形軌道',figure8:'8字形',track_player_x:'跟隨X軸',static:'固定靜止'};
 
     return `
       <div class="section-title">⚡ 彈幕 Pattern — ${poi.name} (威脅 Lv.${poi.threat})</div>
       <div class="info-box">Phase 依 HP 閾值從高到低排列。Boss HP 低於閾值時啟動對應 Phase。</div>
 
-      <!-- Phase 預覽控制 -->
+      <!-- 全域控制 -->
       <div style="display:flex;align-items:center;gap:6px;margin-bottom:12px;flex-wrap:wrap">
-        <span style="font-size:9px;color:var(--muted)">預覽 Phase：</span>
         <button class="ed-btn ed-btn-warn" style="font-size:8px;padding:3px 8px"
-          onclick="PREVIEW.setForcedPhase(-1)">自動（HP）</button>
-        ${phases.map(p => `
-          <button class="ed-btn ed-btn-accent" style="font-size:8px;padding:3px 8px"
-            onclick="PREVIEW.setForcedPhase(${p.phase})">Phase ${p.phase}</button>
-        `).join('')}
+          onclick="PREVIEW.setForcedPhase(-1)">▶ 自動預覽（依HP）</button>
         <button class="ed-btn" style="font-size:8px;padding:3px 8px;color:var(--danger);border-color:rgba(255,58,58,.4);background:rgba(255,58,58,.06)"
           onclick="PREVIEW.playerHp=PREVIEW.playerMaxHp;PREVIEW.damageNumbers=[];APP.status('玩家 HP 已重置')">重置玩家 HP</button>
       </div>
 
-      ${phases.map((p,i) => `
+      ${phases.map((p,i) => {
+        const phaseMove = p.movement_type || movementType;
+        return `
         <div class="phase-card">
           <div class="phase-header">
             <span class="phase-label">PHASE ${p.phase}</span>
+            <button class="ed-btn ed-btn-accent" style="font-size:8px;padding:3px 8px"
+              onclick="PREVIEW.setForcedPhase(${p.phase})">▶ 預覽 Phase ${p.phase}</button>
             <button class="ed-btn ed-btn-danger" style="font-size:8px;padding:3px 8px" onclick="ED.removePhase('${key}',${i})">刪除</button>
           </div>
+          ${poi.type === 'boss' ? `
+          <div class="form-row"><label class="form-label">Boss 移動方式</label>
+            <select class="form-select" style="flex:none;width:140px" onchange="ED.setPhase('${key}',${i},'movement_type',this.value)">
+              ${['wobble','circular','figure8','track_player_x','static'].map(t=>`<option value="${t}" ${phaseMove===t?'selected':''}>${MOVE_LABELS[t]}</option>`).join('')}
+            </select>
+          </div>` : ''}
           <div class="form-row"><label class="form-label">攻擊類型</label>
             <select class="form-select" style="flex:none;width:120px" onchange="ED.setPhase('${key}',${i},'type',this.value)">
               ${['radial','spiral','aimed','wave','chaos','parabola'].map(t=>`<option value="${t}" ${p.type===t?'selected':''}>${{radial:'放射狀',spiral:'螺旋',aimed:'瞄準',wave:'波浪',chaos:'混沌',parabola:'拋物線'}[t]}</option>`).join('')}
@@ -408,9 +405,9 @@ const TABS = {
           </div>
           ${p.trajectory==='parabola'?`<div class="form-row"><label class="form-label">重力</label><input type="range" class="form-input" min="0.01" max="0.5" step="0.01" value="${p.gravity||0.08}" oninput="ED.setPhase('${key}',${i},'gravity',+this.value);this.nextElementSibling.textContent=this.value"><span class="range-val">${p.gravity||0.08}</span></div>`:''}
         </div>
-      `).join('')}
+        `;
+      }).join('')}
       <button class="ed-btn ed-btn-accent" onclick="ED.addPhase('${key}')">+ 新增 Phase</button>
-      ${bossMovementHTML}
       <div style="margin-top:14px">
         <button class="ed-btn ed-btn-green" onclick="PREVIEW.restart()">▶ 更新預覽</button>
       </div>
@@ -511,9 +508,9 @@ const TABS = {
 
   // ── 武器管理 ──────────────────────────────────────────────────
   weapon() {
-    const DEFAULT_IDS = ['pulse_gun','twin','scatter','rapid','laser','seeker'];
-    const PATTERNS = ['single','twin','spread_5','rapid','laser','seek'];
-    const PATTERN_LABELS = {single:'單發',twin:'雙管',spread_5:'散射',rapid:'速射',laser:'雷射',seek:'追蹤'};
+    const DEFAULT_IDS = ['pulse_gun','twin','scatter','rapid','seeker'];
+    const PATTERNS = ['single','twin','spread_5','rapid','seek'];
+    const PATTERN_LABELS = {single:'單發',twin:'雙管',spread_5:'散射',rapid:'速射',seek:'追蹤'};
     const weapons    = DESIGN.weapons;
     const deletedSet = new Set(DESIGN.world?._deleted_weapons || []);
     const editing    = ED._editingWeaponId;
@@ -820,7 +817,6 @@ const TABS = {
   sfx() {
     const EVENTS = [
       ['shoot_single',   '脈衝槍射擊',   {freq:1200,freq2:800, duration:0.06,type:'square',  vol:0.04}],
-      ['shoot_laser',    '雷射砲射擊',   {freq:600, freq2:2000,duration:0.12,type:'sawtooth', vol:0.07}],
       ['shoot_seeker',   '導彈發射',     {freq:900, freq2:1100,duration:0.08,type:'sine',     vol:0.05}],
       ['enemy_hit',      '敵方受擊',     {freq:380, freq2:200, duration:0.07,type:'sawtooth', vol:0.07}],
       ['player_hit',     '玩家受擊',     {freq:150, freq2:80,  duration:0.2, type:'sine',     vol:0.12}],
@@ -925,9 +921,12 @@ const TABS = {
     const layout = DESIGN.ui_layout || {};
 
     // 預設面板定義
+    // 對應主遊戲 PANEL_MGR.registry 的實際浮動面板（商城/背包是 modal，不在此列）
     const PANEL_DEFS = [
-      { id: 'scan-panel',  name: '⬡ 掃描面板',       side: 'left',  defaultTop: 82,  defaultLeft: 16,  defaultWidth: 260 },
-      { id: 'dest-panel',  name: '📍 想前往的地點',   side: 'right', defaultTop: 82,  defaultRight: 16, defaultWidth: 270 },
+      { id: 'scan-panel',  name: '⬡ 掃描面板',     side: 'left',  defaultTop: 82, defaultLeft: 16,  defaultWidth: 260 },
+      { id: 'dest-panel',  name: '📍 想前往的地點', side: 'right', defaultTop: 82, defaultRight: 16, defaultWidth: 270 },
+      { id: 'stats-panel', name: '📊 遊戲統計',     side: 'left',  defaultTop: 82, defaultLeft: 296, defaultWidth: 220 },
+      { id: 'notes-panel', name: '📝 筆記本',       side: 'right', defaultTop: 82, defaultRight: 306, defaultWidth: 220 },
     ];
 
     if (!DESIGN.ui_layout) DESIGN.ui_layout = {};
@@ -976,35 +975,46 @@ const TABS = {
       `;
     }).join('');
 
-    // 迷你預覽（縮放示意圖）
-    const previewScale = 0.22;
-    const SCREEN_W = Math.round(1280 * previewScale);
-    const SCREEN_H = Math.round(720 * previewScale);
+    // 示意圖：固定寬度 560px，等比縮放高度
+    const GAME_W = 1280, GAME_H = 720;
+    const PREVIEW_W = 560;
+    const sc = PREVIEW_W / GAME_W;
+    const PREVIEW_H = Math.round(GAME_H * sc);
 
     const panelPreviewBoxes = PANEL_DEFS.map(def => {
       const s = DESIGN.ui_layout[def.id];
       if (!s.visible) return '';
       const left = s.left !== null
-        ? Math.round(s.left * previewScale)
-        : Math.round((1280 - s.width - (s.right || 0)) * previewScale);
-      const top  = Math.round(s.top * previewScale);
-      const w    = Math.round(s.width * previewScale);
-      const h    = 60;
-      return `<div style="position:absolute;left:${left}px;top:${top}px;width:${w}px;height:${h}px;background:rgba(0,240,255,.1);border:1px solid rgba(0,240,255,.4);border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:7px;color:var(--accent);overflow:hidden">${def.name}</div>`;
+        ? Math.round(s.left * sc)
+        : Math.round((GAME_W - s.width - (s.right || 0)) * sc);
+      const top  = Math.round(s.top * sc);
+      const w    = Math.round(s.width * sc);
+      const h    = Math.round(120 * sc);
+      const color = def.side === 'left' ? 'rgba(0,240,255,.15)' : 'rgba(255,170,0,.15)';
+      const border = def.side === 'left' ? 'rgba(0,240,255,.5)' : 'rgba(255,170,0,.5)';
+      return `<div style="position:absolute;left:${left}px;top:${top}px;width:${w}px;height:${h}px;
+        background:${color};border:1px solid ${border};border-radius:2px;
+        display:flex;align-items:center;justify-content:center;
+        font-size:9px;color:var(--text);text-align:center;padding:2px;overflow:hidden;line-height:1.3">
+        ${def.name}<br><span style="font-size:7px;color:var(--muted)">${s.width}px</span>
+      </div>`;
     }).join('');
 
     return `
       <div class="section-title">🖥 UI 面板設計</div>
-      <div class="info-box">設定主畫面各面板的預設位置與大小。設計結果儲存於 <code>custom_layout.json</code>，主遊戲啟動時自動套用。</div>
+      <div class="info-box">設定主畫面各面板的預設位置與大小。儲存於 <code>custom_layout.json</code>，主遊戲啟動時套用。<br>
+      🟦 左側面板 ／ 🟧 右側面板 ／ 商城・背包為 Modal 彈出層，不在此設定。</div>
 
-      <!-- 迷你示意圖 -->
+      <!-- 示意圖 -->
       <div style="margin-bottom:14px">
-        <div style="font-size:9px;color:var(--muted);margin-bottom:6px">版面示意圖（縮放 ${Math.round(previewScale*100)}%）</div>
-        <div style="position:relative;width:${SCREEN_W}px;height:${SCREEN_H}px;background:rgba(5,8,16,.8);border:1px solid var(--border);border-radius:3px;overflow:hidden">
+        <div style="font-size:9px;color:var(--muted);margin-bottom:6px">版面示意圖（1280×720 縮放至 ${PREVIEW_W}px）</div>
+        <div style="position:relative;width:${PREVIEW_W}px;height:${PREVIEW_H}px;background:rgba(5,8,16,.9);border:1px solid var(--border);border-radius:3px;overflow:hidden">
           <!-- 頂部 HUD 條 -->
-          <div style="position:absolute;top:0;left:0;right:0;height:${Math.round(56*previewScale)}px;background:rgba(0,240,255,.06);border-bottom:1px solid rgba(0,240,255,.2)"></div>
-          <!-- 底部列 -->
-          <div style="position:absolute;bottom:0;left:0;right:0;height:${Math.round(60*previewScale)}px;background:rgba(0,240,255,.04);border-top:1px solid rgba(0,240,255,.1)"></div>
+          <div style="position:absolute;top:0;left:0;right:0;height:${Math.round(56*sc)}px;background:rgba(0,240,255,.07);border-bottom:1px solid rgba(0,240,255,.25);display:flex;align-items:center;padding-left:8px;font-size:8px;color:var(--muted)">HUD 頂部列</div>
+          <!-- 地圖區域 -->
+          <div style="position:absolute;top:${Math.round(56*sc)}px;left:0;right:0;bottom:${Math.round(48*sc)}px;background:rgba(0,20,40,.4);display:flex;align-items:center;justify-content:center;font-size:9px;color:rgba(100,150,200,.3)">地圖</div>
+          <!-- 底部工具列 -->
+          <div style="position:absolute;bottom:0;left:0;right:0;height:${Math.round(48*sc)}px;background:rgba(0,240,255,.05);border-top:1px solid rgba(0,240,255,.15);display:flex;align-items:center;padding-left:8px;font-size:8px;color:var(--muted)">底部工具列</div>
           ${panelPreviewBoxes}
         </div>
       </div>
@@ -1088,7 +1098,7 @@ const ED = {
     APP.status(`✓ ${w.name} 已儲存`);
   },
   deleteWeapon(id) {
-    const DEFAULT_IDS = ['pulse_gun','twin','scatter','rapid','laser','seeker'];
+    const DEFAULT_IDS = ['pulse_gun','twin','scatter','rapid','seeker'];
     if (!DESIGN.world._deleted_weapons) DESIGN.world._deleted_weapons = [];
     const del = DESIGN.world._deleted_weapons;
     const idx = del.indexOf(id);
@@ -1112,7 +1122,6 @@ const SFX_PREVIEW = {
     if (!this.ctx) this.ctx = new (window.AudioContext||window.webkitAudioContext)();
     const DEFAULTS = {
       shoot_single:  {freq:1200,freq2:800, dur:0.06,type:'square',  vol:0.04},
-      shoot_laser:   {freq:600, freq2:2000,dur:0.12,type:'sawtooth', vol:0.07},
       shoot_seeker:  {freq:900, freq2:1100,dur:0.08,type:'sine',     vol:0.05},
       enemy_hit:     {freq:380, freq2:200, dur:0.07,type:'sawtooth', vol:0.07},
       player_hit:    {freq:150, freq2:80,  dur:0.2, type:'sine',     vol:0.12},
@@ -1293,9 +1302,11 @@ const PREVIEW = {
     this.ctx.fillRect(0, 0, cw, ch);
     this.stars.forEach(s => { s.y += s.speed; if(s.y>ch)s.y=0; this.ctx.fillStyle=`rgba(200,220,255,${s.op})`; this.ctx.beginPath(); this.ctx.arc(s.x,s.y,s.r,0,Math.PI*2); this.ctx.fill(); });
 
-    // ── Boss 移動（5 種類型）──────────────────────────────────
+    // ── Boss 移動（每個 Phase 各自的 movement_type）──────────
+    const _globalBm = DESIGN.visuals?.boss_movement?.[this.poi?.threat] || { type: 'wobble' };
+    const _curPattern = this._getCurrentPattern();
     const bm = (this.poi?.type === 'boss')
-      ? (DESIGN.visuals?.boss_movement?.[this.poi.threat] || { type: 'wobble' })
+      ? { ..._globalBm, type: _curPattern?.movement_type || _globalBm.type }
       : { type: 'static' };
 
     switch (bm.type) {

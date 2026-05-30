@@ -6,8 +6,10 @@ window.BATTLE = (() => {
   let canvas, ctx;
   let animId      = null;
   let poiData     = null;
+  let _resultTimer = null;
   let startTime   = 0;
-  let damageTaken = 0;
+  let damageTaken   = 0;
+  let enemiesKilled = 0;
   let gameState   = 'idle';
   let endScheduled = false;
 
@@ -50,7 +52,7 @@ window.BATTLE = (() => {
         const dx = b.x - bp.x, dy = b.y - bp.y;
         if (dx * dx + dy * dy < (br + b.r) ** 2) {
           b.active = false;
-          ENEMY.takeDamage(b.damage);
+          if (ENEMY.takeDamage(b.damage)) enemiesKilled++;
           VFX.spawnHitSpark(b.x, b.y, b.color);
           SFX.enemyHit();
         }
@@ -198,23 +200,49 @@ window.BATTLE = (() => {
       poiData._speedBonus  = sMult > 1.2;
       poiData._noDmgBonus  = damageTaken === 0;
 
-      setTimeout(() => TRANSITION.toMap({
-        poi_id:       poiData.id,
-        won:          true,
-        crystals,
-        damage_taken: damageTaken,
-        type:         poiData.type,
-        threat,
-        speed_bonus:  poiData._speedBonus,
-        no_damage_bonus: poiData._noDmgBonus,
-      }), 3000);
+      const resultData = { poi_id: poiData.id, won: true, crystals, damage_taken: damageTaken, type: poiData.type, threat, speed_bonus: poiData._speedBonus, no_damage_bonus: poiData._noDmgBonus };
+      _showExitBtn(() => { clearTimeout(_resultTimer); TRANSITION.toMap(resultData); });
+      _resultTimer = setTimeout(() => TRANSITION.toMap(resultData), 3000);
 
     } else if (!PLAYER_OBJ.alive) {
       gameState = 'lost';
       endScheduled = true;
       SFX.defeat();
-      setTimeout(() => TRANSITION.toMap({ poi_id: poiData.id, won: false, crystals: 0, damage_taken: damageTaken }), 3000);
+      const resultData = { poi_id: poiData.id, won: false, crystals: 0, damage_taken: damageTaken };
+      _showDeathScreen(resultData);
     }
+  }
+
+  function _showExitBtn(cb) {
+    const el = document.getElementById('battle-result-exit');
+    if (!el) return;
+    el.style.display = 'block';
+    window.BATTLE_EXIT = () => { el.style.display = 'none'; window.BATTLE_EXIT = null; cb(); };
+  }
+
+  function _showDeathScreen(resultData) {
+    const screen = document.getElementById('battle-death-screen');
+    if (!screen) return;
+    screen.style.display = 'flex';
+
+    // 倒數顯示
+    let countdown = 3;
+    const countEl = screen.querySelector('.death-countdown');
+    if (countEl) countEl.textContent = countdown;
+    const tickId = setInterval(() => {
+      countdown--;
+      if (countEl) countEl.textContent = Math.max(0, countdown);
+    }, 1000);
+
+    const doExit = () => {
+      clearInterval(tickId);
+      clearTimeout(_resultTimer);
+      screen.style.display = 'none';
+      window.BATTLE_EXIT = null;
+      TRANSITION.toMap(resultData);
+    };
+    _resultTimer = setTimeout(doExit, 3000);
+    window.BATTLE_EXIT = doExit;
   }
 
   // 主迴圈
@@ -260,12 +288,23 @@ window.BATTLE = (() => {
   // ── 公開 API ─────────────────────────────────────────────────────────────────
 
   function start(data) {
-    SFX.init(); // Web Audio API 需要使用者互動後才能初始化
+    SFX.init();
+
+    // 清除上一場殘留的結算計時器、退出按鈕、死亡畫面
+    if (_resultTimer) { clearTimeout(_resultTimer); _resultTimer = null; }
+    const exitEl = document.getElementById('battle-result-exit');
+    if (exitEl) exitEl.style.display = 'none';
+    window.BATTLE_EXIT = null;
+    const deathEl = document.getElementById('battle-death-screen');
+    if (deathEl) deathEl.style.display = 'none';
+    window.DEATH_RESTART = null;
 
     canvas = document.getElementById('battle-canvas');
     ctx    = canvas.getContext('2d');
     canvas.width  = window.innerWidth;
     canvas.height = window.innerHeight;
+    // 立刻清空畫面，避免殘留上一場結算畫面
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     poiData      = data;
     startTime    = Date.now();
@@ -292,6 +331,7 @@ window.BATTLE = (() => {
 
     canvas.onmousemove = e => PLAYER_OBJ.setMouse(e.clientX, e.clientY);
 
+
     window._battleEsc = e => {
       if (e.key === 'Escape' && gameState === 'playing') {
         gameState = 'lost';
@@ -311,7 +351,15 @@ window.BATTLE = (() => {
     VFX.clear();
     ENEMY.clear();
     if (window._battleEsc) document.removeEventListener('keydown', window._battleEsc);
+    const exitEl = document.getElementById('battle-result-exit');
+    if (exitEl) exitEl.style.display = 'none';
+    window.BATTLE_EXIT = null;
+    const deathEl = document.getElementById('battle-death-screen');
+    if (deathEl) deathEl.style.display = 'none';
+    window.DEATH_RESTART = null;
     if (canvas) canvas.onmousemove = null;
+    // 清空 canvas，避免殘留畫面在下次淡入時出現
+    if (canvas && ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
   }
 
   return { start, stop };

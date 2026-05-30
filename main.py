@@ -251,6 +251,7 @@ def api_dev_import():
         "balance":   "custom_balance.json",
         "world":     "custom_world.json",
         "lore":      "custom_lore.json",
+        "ui_layout": "custom_layout.json",
     }
     for key, filename in mapping.items():
         if key in data:

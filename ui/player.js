@@ -14,7 +14,7 @@ window.PLAYER_OBJ = (() => {
 
   function init(cx, cy) {
     x = cx; y = cy;
-    hp = MAX_HP;
+    hp = (typeof STATE !== 'undefined' && STATE.player.hp > 0) ? STATE.player.hp : MAX_HP;
     invFrames = 0;
     shootTimer = 0;
     mouseX = cx;
@@ -58,6 +58,7 @@ window.PLAYER_OBJ = (() => {
       prevPhase = curPhase;
       SFX?.phaseChange?.();
     }
+
   }
 
   function _shoot(weapon) {
@@ -91,13 +92,6 @@ window.PLAYER_OBJ = (() => {
         SFX?.shoot?.();
         break;
 
-      case 'laser':
-        // 雷射：又長又粗、穿透感（大 r + 快速）
-        BULLETS.spawn({ x, y: y - 12, vx: 0, vy: -16, r: 5, damage, team: 'player', color, maxLife: 80 });
-        BULLETS.spawn({ x, y: y - 12, vx: 0, vy: -16, r: 2, damage: 0, team: 'player', color: '#ffffff', maxLife: 80 });
-        SFX?.shootLaser?.();
-        break;
-
       case 'seek':
         BULLETS.spawn({ x, y: y - 12, vx: 0, vy: -8, r: 4, damage, team: 'player', color, maxLife: 180, seeking: true, seekStrength: 0.35 });
         SFX?.shootSeek?.();
@@ -111,6 +105,7 @@ window.PLAYER_OBJ = (() => {
     hp -= dmg;
     invFrames = INV_FRAMES;
     if (hp <= 0) { hp = 0; alive = false; }
+    window.STATE?.setHp?.(hp);
     return true;
   }
 

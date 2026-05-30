@@ -398,6 +398,10 @@ body.clickable-map .leaflet-container { cursor: crosshair !important; }
 .buy-btn:disabled { opacity: .35; cursor: not-allowed; }
 .equip-btn { color: var(--green); border-color: rgba(0,255,136,.4); background: rgba(0,255,136,.06); }
 .equip-btn:hover { background: rgba(0,255,136,.18); }
+.shop-tab-btn { transition: all .15s; }
+.shop-tab-btn.active { background: rgba(0,240,255,.1) !important; color: var(--accent) !important; border-color: var(--border) !important; }
+.shop-tab-btn:not(.active) { background: transparent !important; color: var(--muted) !important; }
+.shop-tab-btn:not(.active):hover { color: var(--text) !important; }
 
 /* ── 背包 ─────────────────────────────────────────────── */
 .inv-section-title { font-size: 9px; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 8px; }
@@ -630,33 +634,113 @@ body.clickable-map .leaflet-container { cursor: crosshair !important; }
 <!-- 戰鬥覆蓋層（Phase 4） -->
 <div id="battle-overlay">
   <canvas id="battle-canvas"></canvas>
+
+  <!-- 勝利結算：立即退出按鈕 -->
+  <div id="battle-result-exit" style="display:none;position:absolute;left:50%;transform:translateX(-50%);bottom:calc(50% - 115px);z-index:10">
+    <button onclick="window.BATTLE_EXIT?.()" style="font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:2px;padding:8px 28px;background:rgba(0,0,0,.6);border:1px solid rgba(200,220,255,.3);color:rgba(200,220,255,.7);border-radius:3px;cursor:pointer;transition:all .2s"
+      onmouseover="this.style.borderColor='rgba(200,220,255,.7)';this.style.color='#c8deff'"
+      onmouseout="this.style.borderColor='rgba(200,220,255,.3)';this.style.color='rgba(200,220,255,.7)'">
+      ← 立即返回地圖
+    </button>
+  </div>
+
+  <!-- 戰鬥中死亡畫面（簡化） -->
+  <div id="battle-death-screen" style="display:none;position:absolute;inset:0;z-index:20;background:rgba(0,0,0,.85);flex-direction:column;align-items:center;justify-content:center;gap:20px;font-family:'Share Tech Mono',monospace">
+    <div style="font-family:'Orbitron',monospace;font-size:36px;font-weight:900;color:#ff3a3a;text-shadow:0 0 30px rgba(255,58,58,.7);letter-spacing:4px">你已在戰鬥時死亡</div>
+    <div style="font-size:11px;color:rgba(200,220,255,.5);letter-spacing:2px"><span class="death-countdown">3</span> 秒後回地圖</div>
+    <button onclick="window.BATTLE_EXIT?.()" style="font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:2px;padding:9px 30px;background:rgba(255,58,58,.08);border:1px solid rgba(255,58,58,.4);color:#ff8080;border-radius:3px;cursor:pointer;transition:all .2s"
+      onmouseover="this.style.background='rgba(255,58,58,.2)';this.style.color='#fff'"
+      onmouseout="this.style.background='rgba(255,58,58,.08)';this.style.color='#ff8080'">
+      ← 立即返回地圖
+    </button>
+  </div>
+</div>
+
+<!-- 復活畫面（主畫面 HP=0 時） -->
+<div class="modal-overlay" id="revival-modal" style="z-index:300">
+  <div class="modal-box" style="max-width:360px;text-align:center">
+    <div style="font-family:'Orbitron',monospace;font-size:22px;color:#ff3a3a;margin-bottom:16px;text-shadow:0 0 20px rgba(255,58,58,.5)">⚠ 你已倒下</div>
+    <div id="revival-syringe-count" style="font-size:12px;color:var(--muted);margin-bottom:24px;letter-spacing:1px"></div>
+    <div style="display:flex;gap:16px;justify-content:center">
+      <button id="revival-btn" onclick="window.REVIVE?.()" style="font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:2px;padding:10px 28px;background:rgba(0,255,136,.08);border:1px solid rgba(0,255,136,.5);color:#00ff88;border-radius:3px;cursor:pointer;transition:all .2s"
+        onmouseover="if(!this.disabled){this.style.background='rgba(0,255,136,.2)'}"
+        onmouseout="this.style.background='rgba(0,255,136,.08)'">
+        💉 復活
+      </button>
+      <button onclick="window.CHOOSE_DEATH?.()" style="font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:2px;padding:10px 28px;background:rgba(255,58,58,.08);border:1px solid rgba(255,58,58,.4);color:#ff6060;border-radius:3px;cursor:pointer;transition:all .2s"
+        onmouseover="this.style.background='rgba(255,58,58,.2)'"
+        onmouseout="this.style.background='rgba(255,58,58,.08)'">
+        ✕ 死亡
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- 死亡後結算畫面 -->
+<div class="modal-overlay" id="death-settlement-modal" style="z-index:310">
+  <div class="modal-box" style="max-width:400px;text-align:center;gap:14px;display:none;flex-direction:column">
+    <div style="font-family:'Orbitron',monospace;font-size:36px;font-weight:900;color:#ff3a3a;text-shadow:0 0 30px rgba(255,58,58,.6);letter-spacing:4px">你已死亡</div>
+    <div id="settlement-kills" style="font-size:12px;color:#c8deff;letter-spacing:2px;line-height:2.2"></div>
+    <div id="settlement-crystals" style="font-size:12px;color:var(--accent);letter-spacing:2px"></div>
+    <button onclick="window.SETTLEMENT_RESTART?.()" style="font-family:'Share Tech Mono',monospace;font-size:12px;letter-spacing:3px;padding:12px 36px;background:rgba(255,58,58,.1);border:1px solid rgba(255,58,58,.5);color:#ff6060;border-radius:3px;cursor:pointer;margin-top:8px;transition:all .2s"
+      onmouseover="this.style.background='rgba(255,58,58,.25)';this.style.color='#fff'"
+      onmouseout="this.style.background='rgba(255,58,58,.1)';this.style.color='#ff6060'">
+      ↺ 重新開始
+    </button>
+  </div>
 </div>
 
 <!-- 商城 Modal（Phase 5） -->
 <div class="modal-overlay" id="shop-modal">
   <div class="modal-box">
     <div class="modal-header">
-      ◈ 變異武器商城
+      ◈ 商城
       <button class="modal-close" onclick="SHOP.closeModal()">✕</button>
     </div>
+    <!-- Tab 列 -->
+    <div style="display:flex;gap:4px;padding:8px 14px 0;border-bottom:1px solid var(--border)">
+      <button class="shop-tab-btn active" data-tab="weapon" onclick="SHOP.switchTab('weapon')"
+        style="font-family:var(--font-hud);font-size:10px;font-weight:700;letter-spacing:1px;padding:6px 16px;border-radius:3px 3px 0 0;border:1px solid var(--border);border-bottom:none;cursor:pointer;background:rgba(0,240,255,.1);color:var(--accent)">
+        ⚔ 武器商城
+      </button>
+      <button class="shop-tab-btn" data-tab="item" onclick="SHOP.switchTab('item')"
+        style="font-family:var(--font-hud);font-size:10px;font-weight:700;letter-spacing:1px;padding:6px 16px;border-radius:3px 3px 0 0;border:1px solid var(--border);border-bottom:none;cursor:pointer;background:transparent;color:var(--muted)">
+        🎒 道具商城
+      </button>
+    </div>
     <div class="modal-body">
-      <div style="font-size:10px;color:var(--muted);margin-bottom:10px;">
-        使用 <span style="color:var(--accent)">◈ 變異結晶</span> 購買武器。購買後自動裝備至主武器槽。
+      <!-- 武器商城 -->
+      <div id="shop-weapon-panel">
+        <div style="font-size:10px;color:var(--muted);margin-bottom:10px">使用 <span style="color:var(--accent)">◈ 變異結晶</span> 購買武器。</div>
+        <div id="shop-weapon-items"><div style="color:var(--muted);text-align:center;padding:20px">載入中...</div></div>
       </div>
-      <div id="shop-items"><div style="color:var(--muted);text-align:center;padding:20px">載入中...</div></div>
+      <!-- 道具商城 -->
+      <div id="shop-item-panel" style="display:none">
+        <div style="font-size:10px;color:var(--muted);margin-bottom:10px">使用 <span style="color:var(--accent)">◈ 變異結晶</span> 購買道具。</div>
+        <div id="shop-item-list"></div>
+      </div>
     </div>
   </div>
 </div>
 
-<!-- 背包 Modal（Phase 5） -->
+<!-- 背包 Modal -->
 <div class="modal-overlay" id="inventory-modal">
   <div class="modal-box">
     <div class="modal-header">
-      ⊞ 武器背包
+      ⊞ 背包
       <button class="modal-close" onclick="INVENTORY.closeModal()">✕</button>
     </div>
+    <div style="display:flex;gap:0;border-bottom:1px solid rgba(200,220,255,.12);margin-bottom:12px">
+      <button class="shop-tab-btn active" data-inv-tab="weapon" onclick="INVENTORY.switchTab('weapon')" style="flex:1;padding:8px;background:none;border:none;border-bottom:2px solid var(--accent);color:var(--accent);font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:1px;cursor:pointer">武器背包</button>
+      <button class="shop-tab-btn" data-inv-tab="item" onclick="INVENTORY.switchTab('item')" style="flex:1;padding:8px;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:1px;cursor:pointer">道具背包</button>
+    </div>
     <div class="modal-body">
-      <div id="inventory-slots"><div style="color:var(--muted);text-align:center;padding:20px">載入中...</div></div>
+      <div id="inventory-weapon-panel">
+        <div id="inventory-slots"><div style="color:var(--muted);text-align:center;padding:20px">載入中...</div></div>
+      </div>
+      <div id="inventory-item-panel" style="display:none">
+        <div id="inventory-item-list"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -673,11 +757,11 @@ body.clickable-map .leaflet-container { cursor: crosshair !important; }
     <div class="game-title">R·W·B·H</div>
     <div class="vline"></div>
     <div class="stat-block">
-      <div class="stat-label">HP</div>
+      <div class="stat-label">HP <span id="hp-text" style="font-size:9px;color:rgba(200,220,255,.7);letter-spacing:0">100/100</span></div>
       <div class="bar-track"><div class="bar-fill bar-hp" id="bar-hp" style="width:100%"></div></div>
     </div>
     <div class="stat-block">
-      <div class="stat-label">異變</div>
+      <div class="stat-label">異變 <span id="anomaly-text" style="font-size:9px;color:rgba(200,220,255,.7);letter-spacing:0">0%</span></div>
       <div class="bar-track"><div class="bar-fill bar-anomaly" id="bar-anomaly" style="width:0%"></div></div>
     </div>
     <div class="vline"></div>
@@ -694,17 +778,22 @@ body.clickable-map .leaflet-container { cursor: crosshair !important; }
 
   <!-- 掃描面板（座標已移至右側目的地面板） -->
   <div id="scan-panel">
+    <!-- 第一層：標題（可抓取拖曳） -->
     <div class="panel-header">
       <h2>⬡ 掃描區域</h2>
+    </div>
+    <!-- 第二層：操作列（折疊後仍可見） -->
+    <div style="display:flex;align-items:center;gap:6px;padding:4px 10px 4px;border-bottom:1px solid var(--border)">
+      <button class="scan-btn" id="btn-scan" style="flex:1;font-size:9px;padding:5px 0">▶ 開始掃描</button>
       <button class="panel-toggle-btn" data-target="scan-panel" title="折疊/展開">▼</button>
     </div>
+    <!-- 第三層：詳細設定（折疊時隱藏） -->
     <div class="panel-body">
       <div class="field-group">
         <div class="field-label">搜尋半徑 (m)</div>
         <input class="field" id="input-radius" type="number" value="800" min="200" max="3000" step="100">
       </div>
       <div id="scan-status"></div>
-      <button class="scan-btn" id="btn-scan">▶ 開始掃描</button>
       <div id="log"><span class="log-info">// 系統就緒，點擊地圖設定位置...</span></div>
     </div>
     <div class="resize-handle" data-panel="scan-panel"></div>
@@ -1099,12 +1188,13 @@ const PANEL_MGR = {
   // ── 統計面板 ─────────────────────────────────────────────
   _initStatsPanel() {
     const update = () => {
-      const s = window._SESSION_STATS || { battles:0, wins:0, crystals:0, defeated:0 };
+      const s = window._SESSION_STATS || { battles:0, wins:0, crystals:0, defeated_mob:0, defeated_boss:0 };
       const el = document.getElementById('stats-content');
       if (el)
         el.innerHTML = `勝場 <b style="color:var(--green)">${s.wins}</b> / ${s.battles}<br>
           結晶 <b style="color:var(--accent)">${s.crystals}</b><br>
-          擊敗 <b style="color:var(--warning)">${s.defeated}</b> 個事件`;
+          擊敗小怪 <b style="color:var(--mob)">${s.defeated_mob}</b><br>
+          擊敗Boss <b style="color:var(--boss)">${s.defeated_boss}</b>`;
     };
     update();
     window.addEventListener('rwbh_stats_updated', update);
@@ -1191,31 +1281,45 @@ const PANEL_MGR = {
 
 // 目前搜尋到的地點（供收藏使用）
 let _destSearchResult = null;
-let _destRoutePolyline = null;
+window._destRoutePolyline = null;
 
 /** 飛往指定座標、更新面板座標顯示、並繪製步行路線 */
 async function flyToDestination(lat, lng, label) {
   window.MAP?.map?.flyTo([lat, lng], 16, { duration: 1.2 });
-  HUD.toast(`飛往 ${label}`, 1800);
 
   // 更新座標顯示
   document.getElementById('display-lat').textContent = lat.toFixed(6);
   document.getElementById('display-lng').textContent = lng.toFixed(6);
 
-  // 移除舊路線
-  if (_destRoutePolyline) { window.MAP?.map?.removeLayer?.(_destRoutePolyline); _destRoutePolyline = null; }
+  // 移除舊路線與舊資訊
+  if (window._destRoutePolyline) { window.MAP?.map?.removeLayer?.(window._destRoutePolyline); window._destRoutePolyline = null; }
+  const infoEl = document.getElementById('dest-route-info');
+  if (infoEl) infoEl.remove();
 
   // 繪製從玩家到目的地的路線
   const pLat = STATE.player.lat, pLng = STATE.player.lng;
-  if (pLat == null || pLng == null) return;
+  if (pLat == null || pLng == null) { HUD.toast(`飛往 ${label}`, 1800); return; }
   try {
-    const r = await fetch(`/api/route?from_lat=${pLat}&from_lng=${pLng}&to_lat=${lat}&to_lng=${lng}`);
+    const r = await fetch(`/api/route?lat1=${pLat}&lng1=${pLng}&lat2=${lat}&lng2=${lng}`);
     const d = await r.json();
     if (d.ok && d.geometry) {
       const coords = d.geometry.coordinates.map(([ln, la]) => [la, ln]);
-      _destRoutePolyline = L.polyline(coords, { color: 'rgba(30,144,255,.75)', weight: 3, dashArray: '6,4' }).addTo(window.MAP.map);
+      window._destRoutePolyline = L.polyline(coords, { color: 'rgba(30,144,255,.75)', weight: 3, dashArray: '6,4' }).addTo(window.MAP.map);
+
+      // 在面板顯示地標名稱與距離
+      const dist = d.distance_m >= 1000
+        ? `${(d.distance_m/1000).toFixed(1)} km`
+        : `${d.distance_m} m`;
+      const info = document.createElement('div');
+      info.id = 'dest-route-info';
+      info.style.cssText = 'font-size:10px;color:var(--accent);padding:6px 10px;border-top:1px solid var(--border);line-height:1.7';
+      info.innerHTML = `📍 <b>${label}</b><br>🚶 步行 ${dist}（約 ${d.walk_minutes} 分鐘）`;
+      document.getElementById('dest-panel')?.querySelector('.panel-body')?.appendChild(info);
+      HUD.toast(`🚶 ${label} — 步行 ${dist}`, 2500);
+    } else {
+      HUD.toast(`飛往 ${label}`, 1800);
     }
-  } catch(_) {}
+  } catch(_) { HUD.toast(`飛往 ${label}`, 1800); }
 }
 
 // 地名搜尋
@@ -1304,9 +1408,10 @@ document.getElementById('fav-add-btn').addEventListener('click', async () => {
   const name = nameInput.value.trim();
   if (!name) { HUD.toast('請輸入地點名稱'); return; }
 
-  const lat = STATE.player.lat;
-  const lng = STATE.player.lng;
-  if (lat == null || lng == null) { HUD.toast('請先設定玩家位置'); return; }
+  // 優先使用搜尋到的地點座標，否則才用玩家位置
+  const lat = _destSearchResult?.lat ?? STATE.player.lat;
+  const lng = _destSearchResult?.lng ?? STATE.player.lng;
+  if (lat == null || lng == null) { HUD.toast('請先搜尋地點或設定玩家位置'); return; }
 
   const result = await API.favoriteAdd(name, lat, lng);
   if (!result.ok) { HUD.toast('收藏失敗'); return; }
@@ -1350,8 +1455,16 @@ window.HUD = {
     t._tid = setTimeout(() => t.classList.remove("show"), duration);
   },
 
-  setHP(pct)       { document.getElementById("bar-hp").style.width      = pct + "%"; },
-  setAnomaly(pct)  { document.getElementById("bar-anomaly").style.width  = pct + "%"; },
+  setHP(pct, hp, maxHp) {
+    document.getElementById("bar-hp").style.width = pct + "%";
+    const t = document.getElementById("hp-text");
+    if (t && hp != null) t.textContent = hp + "/" + maxHp;
+  },
+  setAnomaly(pct)  {
+    document.getElementById("bar-anomaly").style.width = pct + "%";
+    const t = document.getElementById("anomaly-text");
+    if (t) t.textContent = Math.round(pct) + "%";
+  },
   setCrystals(n)   { document.getElementById("crystal-val").textContent  = n; },
   setEventCounts(mobs, bosses) {
     document.getElementById("mob-count").textContent  = mobs   + " 小怪";
@@ -1368,7 +1481,11 @@ document.addEventListener("playerMoved", e => {
 });
 
 document.addEventListener("crystalsChanged", e => HUD.setCrystals(e.detail.crystals));
-document.addEventListener("hpChanged",       e => HUD.setHP(Math.round(e.detail.hp / e.detail.maxHp * 100)));
+document.addEventListener("hpChanged", e => {
+  HUD.setHP(Math.round(e.detail.hp / e.detail.maxHp * 100), e.detail.hp, e.detail.maxHp);
+  // 主畫面 HP 歸零 → 跳出復活畫面
+  if (e.detail.hp <= 0 && STATE.ui.currentView === 'map') showRevivalModal();
+});
 document.addEventListener("poisUpdated", () => {
   HUD.setEventCounts(STATE.world.mobCount, STATE.world.bossCount);
   // Phase 3：異變進度條根據附近 Boss 數量自動增長
@@ -1390,6 +1507,10 @@ async function startScan() {
   const lat = STATE.player.lat;
   const lng = STATE.player.lng;
   if (!lat || !lng) { HUD.log("尚未設定玩家位置", "err"); return; }
+
+  // 飛回玩家位置 + 清除所有舊路線
+  window.MAP?.map?.flyTo([lat, lng], 16, { duration: 1.0 });
+  window.MAP?.clearAllRoutes?.();
 
   const btn    = document.getElementById("btn-scan");
   const radius = parseInt(document.getElementById("input-radius").value) || 800;
@@ -1475,6 +1596,8 @@ document.getElementById("btn-locate").addEventListener("click", () => {
       setGpsActive(true);
       STATE.setPlayerPos(lat, lng);
       HUD.log(`GPS 更新：${lat.toFixed(5)}, ${lng.toFixed(5)}`, "ok");
+      // 更新已開啟的 popup 路線與地點資訊
+      window.MAP?.refreshOpenPopupRoute?.();
     },
     err => {
       HUD.log("GPS 失敗：" + err.message, "err");
@@ -1498,14 +1621,66 @@ document.getElementById("btn-bag").addEventListener("click",  () => {
 document.getElementById("shop-modal").addEventListener("click", e => { if (e.target === e.currentTarget) SHOP.closeModal(); });
 document.getElementById("inventory-modal").addEventListener("click", e => { if (e.target === e.currentTarget) INVENTORY.closeModal(); });
 
+// ── 復活畫面 ──────────────────────────────────────────────────────────────────
+function showRevivalModal() {
+  const count = window.ITEMS?.count('revive_syringe') || 0;
+  const el = document.getElementById('revival-modal');
+  const btn = document.getElementById('revival-btn');
+  const info = document.getElementById('revival-syringe-count');
+  info.textContent = `你有 ${count} 個復活針劑`;
+  btn.disabled = count <= 0;
+  btn.style.opacity = count <= 0 ? '0.35' : '1';
+  btn.style.cursor = count <= 0 ? 'not-allowed' : 'pointer';
+  el.style.display = 'flex';
+
+  window.REVIVE = () => {
+    if (!window.ITEMS?.use('revive_syringe')) return;
+    // 直接呼叫 shop.js 的 ITEM_DEFS 效果，保持一致
+    const def = window.ITEM_DEFS_MAP?.['revive_syringe'];
+    if (def) def.use(); else { STATE.setHp(Math.round(STATE.player.maxHp * 0.3)); window.HUD?.toast('💉 復活！HP 恢復 30%', 2500); }
+    el.style.display = 'none';
+    window.REVIVE = null; window.CHOOSE_DEATH = null;
+  };
+
+  window.CHOOSE_DEATH = () => {
+    el.style.display = 'none';
+    window.REVIVE = null; window.CHOOSE_DEATH = null;
+    showDeathSettlement();
+  };
+}
+
+// ── 死亡後結算畫面 ────────────────────────────────────────────────────────────
+function showDeathSettlement() {
+  const modal = document.getElementById('death-settlement-modal');
+  const inner = modal.querySelector('.modal-box');
+  const s = window._SESSION_STATS || { defeated_mob:0, defeated_boss:0, crystals:0 };
+  document.getElementById('settlement-kills').innerHTML =
+    `你已擊殺了 <b style="color:var(--mob)">${s.defeated_mob}</b> 隻小怪<br>以及 <b style="color:var(--boss)">${s.defeated_boss}</b> 個 Boss`;
+  document.getElementById('settlement-crystals').textContent =
+    `你總共獲得了 ◈ ${s.crystals} 個變異結晶`;
+  modal.style.display = 'flex';
+  inner.style.display = 'flex';
+
+  window.SETTLEMENT_RESTART = () => {
+    modal.style.display = 'none';
+    window.SETTLEMENT_RESTART = null;
+    // 重置本局統計與狀態
+    window._SESSION_STATS = { battles:0, wins:0, crystals:0, defeated_mob:0, defeated_boss:0 };
+    window.ITEMS = Object.assign(window.ITEMS || {}, { heal_potion:0, revive_syringe:0 });
+    STATE.setHp(STATE.player.maxHp);
+    updateStatsBar();
+    HUD.toast('新的冒險開始', 2000);
+  };
+}
+
 // ── 初始化：設定預設玩家位置（不自動掃描）────────────────────────────────────
 
 // ── 統計欄更新 ────────────────────────────────────────────────────────────────
 
 function updateStatsBar() {
-  const s = window._SESSION_STATS || { battles:0, wins:0, crystals:0, defeated:0 };
+  const s = window._SESSION_STATS || { battles:0, wins:0, crystals:0, defeated_mob:0, defeated_boss:0 };
   document.getElementById("stats-bar").innerHTML =
-    `勝場 ${s.wins}/${s.battles} ｜ 結晶 ${s.crystals} ｜ 擊敗 ${s.defeated}`;
+    `勝場 ${s.wins}/${s.battles} ｜ 結晶 ${s.crystals} ｜ 小怪 ${s.defeated_mob} ｜ Boss ${s.defeated_boss}`;
   window.dispatchEvent(new Event('rwbh_stats_updated'));
 }
 

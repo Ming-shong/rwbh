@@ -51,16 +51,6 @@ WEAPONS: dict[str, dict] = {
         "price":       150,
         "icon":        "≡",
     },
-    "laser": {
-        "name":        "雷射砲",
-        "description": "貫穿性高能光束，威力強但需蓄力。",
-        "damage":      45,
-        "fire_rate":   30,
-        "pattern":     "laser",
-        "color":       "#ff00ff",
-        "price":       200,
-        "icon":        "━",
-    },
     "seeker": {
         "name":        "追蹤導彈",
         "description": "自動追蹤目標，幾乎不會脫靶。",
