@@ -1,0 +1,1575 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RWBH — Real World Bullet Hell</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+
+<style>
+:root {
+  --bg:        #050810;
+  --panel:     #0a0f1e;
+  --border:    #1a2a4a;
+  --accent:    #00f0ff;
+  --danger:    #ff3a3a;
+  --warning:   #ffaa00;
+  --green:     #00ff88;
+  --text:      #c8deff;
+  --muted:     #4a6080;
+  --mob:       #ff6b35;
+  --boss:      #ff1a6e;
+  --font-mono: 'Share Tech Mono', monospace;
+  --font-hud:  'Orbitron', sans-serif;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 100%; height: 100%; background: var(--bg); color: var(--text); font-family: var(--font-mono); overflow: hidden; }
+
+/* ── 地圖 ─────────────────────────────────────────────── */
+#map { position: fixed; inset: 0; z-index: 1; }
+.leaflet-tile { filter: brightness(.55) saturate(.5) hue-rotate(195deg); }
+.leaflet-container { background: var(--bg) !important; }
+.leaflet-control-zoom a {
+  background: var(--panel) !important; color: var(--accent) !important;
+  border: 1px solid var(--border) !important; font-family: var(--font-mono) !important;
+}
+.leaflet-control-attribution { display: none !important; }
+/* 將縮放控件推入 corner 框線內 */
+.leaflet-top.leaflet-left { margin-top: 66px !important; margin-left: 8px !important; }
+
+/* 點擊地圖時顯示十字游標（GPS 關閉時） */
+body.clickable-map .leaflet-container { cursor: crosshair !important; }
+
+/* ── Popup ───────────────────────────────────────────── */
+.leaflet-popup-content-wrapper {
+  background: rgba(10,15,30,.97) !important; border: 1px solid var(--border) !important;
+  border-radius: 4px !important; color: var(--text) !important;
+  box-shadow: 0 0 40px rgba(0,0,0,.8) !important; backdrop-filter: blur(8px); padding: 0 !important;
+}
+.leaflet-popup-tip { background: rgba(10,15,30,.97) !important; }
+.leaflet-popup-close-button { color: var(--muted) !important; font-size: 18px !important; top: 8px !important; right: 8px !important; }
+.leaflet-popup-content { margin: 0 !important; }
+
+.event-card { padding: 16px; min-width: 220px; }
+.card-badge { font-family: var(--font-hud); font-size: 8px; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; margin-bottom: 6px; }
+.card-badge.mob  { color: var(--mob); }
+.card-badge.boss { color: var(--boss); }
+.card-name { font-family: var(--font-hud); font-size: 13px; font-weight: 700; margin-bottom: 10px; line-height: 1.4; }
+.card-stats { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+.card-row { display: flex; justify-content: space-between; font-size: 11px; }
+.ck { color: var(--muted); letter-spacing: 1px; }
+.cv { color: var(--text); }
+.card-btn {
+  width: 100%; padding: 10px; font-family: var(--font-hud); font-size: 10px;
+  font-weight: 700; letter-spacing: 2px; text-transform: uppercase;
+  border-radius: 3px; cursor: pointer; border: 1px solid; transition: all .2s;
+}
+.mob-btn  { color: var(--mob);  border-color: rgba(255,107,53,.5); background: rgba(255,107,53,.1); }
+.mob-btn:hover  { background: rgba(255,107,53,.25); }
+.boss-btn { color: var(--boss); border-color: rgba(255,26,110,.5);  background: rgba(255,26,110,.1); }
+.boss-btn:hover { background: rgba(255,26,110,.25); }
+
+/* ── 標記 ────────────────────────────────────────────── */
+.player-dot {
+  width: 20px; height: 20px; border-radius: 50%;
+  background: rgba(0,240,255,.2); border: 2px solid var(--accent);
+  box-shadow: 0 0 14px rgba(0,240,255,.9), 0 0 32px rgba(0,240,255,.3);
+  position: relative;
+}
+.player-core {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+}
+.mob-marker  { border-radius: 50%; background: rgba(255,107,53,.25); border: 1.5px solid var(--mob); }
+.boss-marker { background: rgba(255,26,110,.2); border: 2px solid var(--boss); transform: rotate(45deg); }
+
+/* ── HUD ─────────────────────────────────────────────── */
+#hud { position: fixed; inset: 0; pointer-events: none; z-index: 1000; }
+
+/* 頂部列 */
+#top-bar {
+  position: absolute; top: 0; left: 0; right: 0; height: 56px;
+  background: linear-gradient(180deg, rgba(5,8,16,.95) 70%, transparent);
+  border-bottom: 1px solid rgba(0,240,255,.12);
+  display: flex; align-items: center; padding: 0 20px; gap: 20px;
+  pointer-events: all;
+}
+.game-title {
+  font-family: var(--font-hud); font-size: 13px; font-weight: 900;
+  color: var(--accent); letter-spacing: 4px;
+  text-shadow: 0 0 14px rgba(0,240,255,.6); white-space: nowrap;
+}
+.vline { width: 1px; height: 24px; background: var(--border); flex-shrink: 0; }
+.stat-block { display: flex; flex-direction: column; gap: 3px; }
+.stat-label { font-size: 9px; letter-spacing: 2px; color: var(--muted); text-transform: uppercase; }
+.bar-track { width: 140px; height: 7px; background: rgba(255,255,255,.06); border: 1px solid var(--border); border-radius: 2px; overflow: hidden; }
+.bar-fill { height: 100%; border-radius: 2px; transition: width .4s; }
+.bar-hp      { background: linear-gradient(90deg,#ff3a3a,#ff7070); }
+.bar-anomaly { background: linear-gradient(90deg,#7700ff,#ff00aa); }
+.crystal-row { display: flex; align-items: center; gap: 8px; font-family: var(--font-hud); font-size: 15px; font-weight: 700; color: var(--accent); }
+.crystal-lbl { font-size: 9px; color: var(--muted); letter-spacing: 1px; }
+#coords { margin-left: auto; font-size: 10px; color: var(--muted); text-align: right; line-height: 1.7; }
+
+/* ── 掃描面板 ─────────────────────────────────────────── */
+#scan-panel {
+  position: absolute; top: 82px; left: 16px; width: 260px;
+  background: rgba(10,15,30,.92); border: 1px solid var(--border);
+  border-radius: 4px; padding: 14px; pointer-events: all;
+  backdrop-filter: blur(8px); box-shadow: 0 0 40px rgba(0,240,255,.05);
+}
+#scan-panel h2 {
+  font-family: var(--font-hud); font-size: 9px; font-weight: 700;
+  color: var(--accent); letter-spacing: 3px; margin-bottom: 12px;
+}
+
+/* 唯讀座標顯示區（用於想前往的地點面板） */
+.coord-display-row {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;
+}
+.coord-box {
+  background: rgba(0,0,0,.5); border: 1px solid var(--border);
+  border-radius: 3px; padding: 7px 10px;
+}
+.coord-box-label { font-size: 8px; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 3px; }
+.coord-box-val   { font-size: 11px; color: var(--text); font-family: var(--font-mono); }
+
+.field-group { display: flex; flex-direction: column; gap: 5px; margin-bottom: 8px; }
+.field-label { font-size: 9px; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; }
+.field {
+  background: rgba(0,0,0,.4); border: 1px solid var(--border);
+  color: var(--text); font-family: var(--font-mono); font-size: 12px;
+  padding: 7px 10px; border-radius: 3px; width: 100%; transition: border-color .2s;
+}
+.field:focus { outline: none; border-color: rgba(0,240,255,.5); }
+
+/* 點擊提示文字 */
+#click-hint {
+  font-size: 9px; color: var(--muted); letter-spacing: 1px;
+  margin-bottom: 8px; text-align: center;
+  padding: 5px; border: 1px dashed rgba(0,240,255,.15); border-radius: 3px;
+}
+#click-hint.gps-on { color: rgba(0,240,255,.4); border-color: rgba(0,240,255,.2); }
+
+.scan-btn {
+  width: 100%; padding: 9px; margin-top: 4px;
+  font-family: var(--font-hud); font-size: 10px; font-weight: 700; letter-spacing: 3px;
+  background: rgba(0,240,255,.1); border: 1px solid rgba(0,240,255,.5);
+  color: var(--accent); border-radius: 3px; cursor: pointer; transition: all .2s;
+}
+.scan-btn:hover:not(:disabled) { background: rgba(0,240,255,.2); box-shadow: 0 0 18px rgba(0,240,255,.2); }
+.scan-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+/* ── 想前往的地點面板 ─────────────────────────────────── */
+#dest-panel {
+  position: absolute; top: 82px; right: 16px; width: 270px;
+  background: rgba(10,15,30,.92); border: 1px solid var(--border);
+  border-radius: 4px; padding: 14px; pointer-events: all;
+  backdrop-filter: blur(8px); box-shadow: 0 0 40px rgba(0,240,255,.05);
+  max-height: calc(100vh - 140px); overflow-y: auto; overflow-x: hidden;
+}
+#dest-panel::-webkit-scrollbar { width: 3px; }
+#dest-panel::-webkit-scrollbar-thumb { background: var(--border); }
+#dest-panel h2 {
+  font-family: var(--font-hud); font-size: 9px; font-weight: 700;
+  color: var(--warning); letter-spacing: 3px; margin-bottom: 10px; cursor: grab;
+}
+.dest-divider {
+  border: none; border-top: 1px solid var(--border); margin: 10px 0;
+}
+.dest-search-row {
+  display: flex; gap: 6px; margin-bottom: 8px;
+}
+.dest-search-row .field { flex: 1; margin: 0; }
+.dest-search-btn {
+  font-family: var(--font-hud); font-size: 10px; font-weight: 700;
+  padding: 7px 10px; border-radius: 3px; cursor: pointer;
+  background: rgba(255,170,0,.12); border: 1px solid rgba(255,170,0,.5);
+  color: var(--warning); white-space: nowrap; transition: all .2s;
+}
+.dest-search-btn:hover { background: rgba(255,170,0,.25); }
+#dest-result {
+  font-size: 10px; color: var(--accent); margin-bottom: 8px;
+  min-height: 16px; line-height: 1.5;
+}
+.dest-result-btn {
+  width: 100%; padding: 6px 8px; text-align: left;
+  font-family: var(--font-mono); font-size: 9px; color: var(--text);
+  background: rgba(0,240,255,.06); border: 1px solid rgba(0,240,255,.2);
+  border-radius: 3px; cursor: pointer; transition: all .2s; margin-bottom: 6px;
+}
+.dest-result-btn:hover { background: rgba(0,240,255,.15); }
+
+/* 收藏區 */
+.fav-add-row {
+  display: flex; gap: 6px; margin-bottom: 8px; align-items: center;
+}
+.fav-add-row .field { flex: 1; margin: 0; font-size: 11px; }
+.fav-add-btn {
+  font-size: 13px; padding: 6px 10px; cursor: pointer;
+  background: rgba(255,170,0,.12); border: 1px solid rgba(255,170,0,.4);
+  color: var(--warning); border-radius: 3px; transition: all .2s;
+  font-family: var(--font-hud);
+}
+.fav-add-btn:hover { background: rgba(255,170,0,.25); }
+.fav-section-title {
+  font-size: 9px; color: var(--muted); letter-spacing: 2px; text-transform: uppercase;
+  margin-bottom: 6px;
+}
+#fav-list { display: flex; flex-direction: column; gap: 4px; }
+.fav-item {
+  display: flex; align-items: center; gap: 6px; padding: 6px 8px;
+  background: rgba(0,0,0,.3); border: 1px solid var(--border);
+  border-radius: 3px;
+}
+.fav-star { color: var(--warning); font-size: 12px; flex-shrink: 0; }
+.fav-name { flex: 1; font-size: 10px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fav-fly-btn, .fav-del-btn {
+  font-size: 9px; padding: 3px 7px; border-radius: 2px; cursor: pointer;
+  font-family: var(--font-hud); border: 1px solid; transition: all .15s; white-space: nowrap;
+}
+.fav-fly-btn { color: var(--accent); border-color: rgba(0,240,255,.4); background: rgba(0,240,255,.06); }
+.fav-fly-btn:hover { background: rgba(0,240,255,.2); }
+.fav-del-btn { color: var(--danger); border-color: rgba(255,58,58,.4); background: rgba(255,58,58,.06); }
+.fav-del-btn:hover { background: rgba(255,58,58,.2); }
+
+.fav-export-btn {
+  width: 100%; margin-top: 8px; padding: 8px;
+  font-family: var(--font-hud); font-size: 9px; font-weight: 700; letter-spacing: 2px;
+  background: rgba(0,255,136,.08); border: 1px solid rgba(0,255,136,.4);
+  color: var(--green); border-radius: 3px; cursor: pointer; transition: all .2s;
+}
+.fav-export-btn:hover { background: rgba(0,255,136,.2); }
+
+/* 收藏地點地圖標記 */
+.fav-marker {
+  font-size: 18px; line-height: 1; color: var(--warning);
+  text-shadow: 0 0 10px rgba(255,170,0,.8);
+  cursor: pointer;
+}
+
+#log {
+  margin-top: 10px; border-top: 1px solid var(--border); padding-top: 8px;
+  max-height: 110px; overflow-y: auto; font-size: 10px; line-height: 1.9; color: var(--muted);
+}
+#log::-webkit-scrollbar { width: 3px; }
+#log::-webkit-scrollbar-thumb { background: var(--border); }
+.log-ok   { color: var(--green); }
+.log-warn { color: var(--warning); }
+.log-err  { color: var(--danger); }
+.log-info { color: var(--accent); }
+
+/* ── 底部列 ───────────────────────────────────────────── */
+#bottom-bar {
+  position: absolute; bottom: 0; left: 0; right: 0; height: 60px;
+  background: linear-gradient(0deg, rgba(5,8,16,.95) 70%, transparent);
+  border-top: 1px solid rgba(0,240,255,.08);
+  display: flex; align-items: center; padding: 0 16px; gap: 10px;
+  pointer-events: all;
+}
+.hud-btn {
+  font-family: var(--font-hud); font-size: 9px; font-weight: 700;
+  letter-spacing: 2px; text-transform: uppercase;
+  padding: 9px 14px; border-radius: 3px; cursor: pointer;
+  border: 1px solid; transition: all .2s;
+}
+.btn-shop { color: var(--warning); border-color: rgba(255,170,0,.4);  background: rgba(255,170,0,.08); }
+.btn-shop:hover { background: rgba(255,170,0,.2); }
+.btn-bag  { color: var(--green);   border-color: rgba(0,255,136,.4);  background: rgba(0,255,136,.08); }
+.btn-bag:hover  { background: rgba(0,255,136,.2); }
+
+/* 定位按鈕：預設灰色 / GPS 啟用後藍色 */
+.btn-locate {
+  margin-left: auto;
+  color: var(--muted);
+  border-color: rgba(74,96,128,.5);
+  background: rgba(74,96,128,.08);
+}
+.btn-locate:hover { background: rgba(74,96,128,.2); }
+.btn-locate.gps-active {
+  color: var(--accent);
+  border-color: rgba(0,240,255,.5);
+  background: rgba(0,240,255,.12);
+  box-shadow: 0 0 12px rgba(0,240,255,.25);
+}
+
+.event-counts { display: flex; gap: 14px; margin-left: auto; font-size: 10px; color: var(--muted); }
+.count-item { display: flex; align-items: center; gap: 5px; }
+.dot { width: 7px; height: 7px; border-radius: 50%; }
+.dot-mob  { background: var(--mob);  box-shadow: 0 0 5px var(--mob); }
+.dot-boss { background: var(--boss); box-shadow: 0 0 5px var(--boss); }
+
+/* ── 裝飾 ─────────────────────────────────────────────── */
+.corner { position: absolute; width: 16px; height: 16px; pointer-events: none; border-color: rgba(0,240,255,.25); }
+.c-tl { top: 58px;   left:  0; border-top:    1px solid; border-left:  1px solid; }
+.c-tr { top: 58px;   right: 0; border-top:    1px solid; border-right: 1px solid; }
+.c-bl { bottom: 62px; left:  0; border-bottom: 1px solid; border-left:  1px solid; }
+.c-br { bottom: 62px; right: 0; border-bottom: 1px solid; border-right: 1px solid; }
+
+@keyframes scanline { 0%{top:-2px;opacity:.6} 100%{top:100%;opacity:0} }
+#scanline {
+  position: absolute; left: 0; right: 0; height: 2px; pointer-events: none; z-index: 1001;
+  background: linear-gradient(90deg, transparent, rgba(0,240,255,.35), transparent);
+  animation: scanline 5s linear infinite;
+}
+
+/* ── Boss 污染圈動畫（Phase 3）─────────────────────────── */
+@keyframes bossAnomalyPulse {
+  0%   { stroke-opacity: 0.5; stroke-dashoffset: 0; }
+  50%  { stroke-opacity: 0.9; }
+  100% { stroke-opacity: 0.5; stroke-dashoffset: 40; }
+}
+.boss-anomaly-circle path,
+.leaflet-interactive.boss-anomaly-circle {
+  animation: bossAnomalyPulse 2.4s ease-in-out infinite;
+}
+
+/* ── 戰鬥覆蓋層 ───────────────────────────────────────── */
+#battle-overlay {
+  position: fixed; inset: 0; z-index: 2000;
+  background: #050810; display: none; opacity: 0;
+}
+#battle-canvas { display: block; width: 100%; height: 100%; }
+
+/* ── 掃描狀態 ─────────────────────────────────────────── */
+#scan-status {
+  font-size: 9px; color: var(--accent); letter-spacing: 1px;
+  margin-bottom: 6px; text-align: center; min-height: 14px;
+}
+
+/* ── Modal 共用 ───────────────────────────────────────── */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 3000;
+  background: rgba(0,0,0,.7); backdrop-filter: blur(4px);
+  display: none; align-items: center; justify-content: center;
+}
+.modal-overlay.open { display: flex; }
+.modal-box {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 6px; width: 520px; max-width: 95vw;
+  max-height: 82vh; display: flex; flex-direction: column;
+  box-shadow: 0 0 60px rgba(0,240,255,.08);
+}
+.modal-header {
+  padding: 14px 18px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+  font-family: var(--font-hud); font-size: 11px; font-weight: 700;
+  letter-spacing: 3px; color: var(--accent);
+}
+.modal-close {
+  background: none; border: none; color: var(--muted); font-size: 18px;
+  cursor: pointer; line-height: 1; padding: 0 4px;
+}
+.modal-close:hover { color: var(--text); }
+.modal-body { padding: 14px 18px; overflow-y: auto; flex: 1; }
+.modal-body::-webkit-scrollbar { width: 3px; }
+.modal-body::-webkit-scrollbar-thumb { background: var(--border); }
+
+/* ── 商城 ─────────────────────────────────────────────── */
+.shop-card {
+  background: rgba(0,0,0,.3); border: 1px solid var(--border);
+  border-radius: 4px; padding: 12px 14px; margin-bottom: 10px;
+  transition: border-color .2s;
+}
+.shop-card.owned   { opacity: .65; }
+.shop-card.equipped { border-color: rgba(0,240,255,.4); }
+.shop-card:not(.owned):hover { border-color: rgba(0,240,255,.3); }
+.shop-card-header { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 8px; }
+.shop-icon { font-size: 22px; width: 28px; flex-shrink: 0; }
+.shop-name { font-family: var(--font-hud); font-size: 11px; font-weight: 700; color: var(--text); margin-bottom: 3px; }
+.shop-desc { font-size: 10px; color: var(--muted); }
+.shop-stats { display: flex; gap: 14px; font-size: 10px; color: var(--muted); margin-bottom: 8px; }
+.shop-stats b { color: var(--text); }
+.shop-footer { display: flex; align-items: center; justify-content: space-between; }
+.shop-price { font-family: var(--font-hud); font-size: 11px; color: var(--accent); }
+.shop-price.unaffordable { color: var(--muted); }
+.shop-tag-owned { font-size: 10px; color: var(--green); letter-spacing: 1px; }
+.shop-btn {
+  font-family: var(--font-hud); font-size: 9px; font-weight: 700;
+  letter-spacing: 2px; padding: 7px 14px; border-radius: 3px; cursor: pointer;
+  border: 1px solid; transition: all .2s;
+}
+.buy-btn { color: var(--accent); border-color: rgba(0,240,255,.5); background: rgba(0,240,255,.08); }
+.buy-btn:hover:not(:disabled) { background: rgba(0,240,255,.2); }
+.buy-btn:disabled { opacity: .35; cursor: not-allowed; }
+.equip-btn { color: var(--green); border-color: rgba(0,255,136,.4); background: rgba(0,255,136,.06); }
+.equip-btn:hover { background: rgba(0,255,136,.18); }
+
+/* ── 背包 ─────────────────────────────────────────────── */
+.inv-section-title { font-size: 9px; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 8px; }
+.inv-slots-row { display: flex; gap: 10px; margin-bottom: 6px; }
+.inv-slot {
+  flex: 1; padding: 10px 8px; border-radius: 4px; border: 1px solid var(--border);
+  text-align: center; min-height: 72px; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 4px; background: rgba(0,0,0,.3);
+}
+.inv-slot.filled { border-color: rgba(0,240,255,.3); }
+.inv-slot-label { font-size: 8px; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; }
+.inv-slot-icon { font-size: 20px; }
+.inv-slot-name { font-size: 10px; color: var(--text); font-family: var(--font-hud); }
+.inv-slot-empty { font-size: 10px; color: rgba(74,96,128,.5); }
+.inv-owned-list { display: flex; flex-direction: column; gap: 6px; }
+.inv-weapon-row {
+  display: flex; align-items: center; gap: 12px; padding: 10px 12px;
+  border-radius: 4px; border: 1px solid var(--border); background: rgba(0,0,0,.3);
+  cursor: pointer; transition: all .2s;
+}
+.inv-weapon-row:hover   { border-color: rgba(0,240,255,.3); background: rgba(0,240,255,.04); }
+.inv-weapon-row.equipped { border-color: rgba(0,255,136,.35); background: rgba(0,255,136,.04); }
+.inv-w-icon { font-size: 18px; flex-shrink: 0; width: 24px; }
+.inv-w-info { flex: 1; }
+.inv-w-name { font-family: var(--font-hud); font-size: 10px; color: var(--text); margin-bottom: 3px; }
+.equipped-tag { color: var(--green); font-size: 9px; }
+.inv-w-desc { font-size: 9px; color: var(--muted); }
+.inv-w-stats { font-size: 9px; color: var(--muted); text-align: right; line-height: 1.7; }
+
+/* ── 統計顯示 ─────────────────────────────────────────── */
+#stats-bar {
+  position: absolute; bottom: 62px; right: 16px;
+  font-size: 9px; color: var(--muted); text-align: right;
+  line-height: 1.8; pointer-events: none;
+}
+
+/* ══ 通用 HUD 面板系統 ════════════════════════════════ */
+
+/* 面板標題列（拖曳把手 + 折疊鈕） */
+.panel-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 10px;
+}
+.panel-header h2 { margin-bottom: 0; flex: 1; cursor: grab; user-select: none; }
+.panel-header h2:active { cursor: grabbing; }
+
+/* 折疊/展開按鈕 */
+.panel-toggle-btn {
+  background: none; border: 1px solid rgba(255,255,255,.12);
+  color: var(--muted); font-size: 9px; border-radius: 2px;
+  width: 18px; height: 18px; cursor: pointer; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  transition: all .15s; line-height: 1;
+}
+.panel-toggle-btn:hover { color: var(--text); border-color: rgba(255,255,255,.25); }
+
+/* 面板內容區（可折疊） */
+.panel-body {
+  overflow: hidden;
+  transition: max-height .28s cubic-bezier(.4,0,.2,1), opacity .22s;
+  max-height: 800px; opacity: 1;
+}
+
+/* 折疊狀態 */
+.panel-collapsed .panel-body { max-height: 0 !important; opacity: 0; }
+.panel-collapsed { min-height: auto !important; }
+
+/* ── 版面設計模式 ────────────────────────────────────── */
+.design-mode-active #scan-panel,
+.design-mode-active #dest-panel,
+.design-mode-active .custom-panel {
+  outline: 1px dashed rgba(0,240,255,.5);
+}
+.design-mode-active #scan-panel:hover,
+.design-mode-active #dest-panel:hover,
+.design-mode-active .custom-panel:hover {
+  outline-color: var(--accent);
+  box-shadow: 0 0 12px rgba(0,240,255,.15);
+}
+
+/* 調整大小把手 */
+.resize-handle {
+  display: none; position: absolute; bottom: 3px; right: 3px;
+  width: 14px; height: 14px; cursor: nwse-resize; z-index: 10;
+}
+.resize-handle::after {
+  content: '⠿'; font-size: 10px; color: var(--muted); line-height: 1;
+}
+.design-mode-active .resize-handle { display: flex; align-items: center; justify-content: center; }
+
+/* 面板刪除鈕（版面設計模式中顯示） */
+.panel-delete-btn {
+  display: none; position: absolute; top: 4px; right: 4px; z-index: 20;
+  background: rgba(255,58,58,.8); border: none; color: #fff;
+  font-size: 9px; width: 16px; height: 16px; border-radius: 2px;
+  cursor: pointer; align-items: center; justify-content: center;
+}
+.design-mode-active .panel-delete-btn { display: flex; }
+
+/* 尺寸標記（版面設計模式） */
+.panel-size-label {
+  display: none; position: absolute; bottom: 3px; left: 6px;
+  font-size: 7px; color: var(--muted); font-family: var(--font-mono);
+  pointer-events: none;
+}
+.design-mode-active .panel-size-label { display: block; }
+
+/* ── 版面管理器 ──────────────────────────────────────── */
+#panel-manager-overlay {
+  position: fixed; inset: 0; z-index: 4000;
+  background: rgba(0,0,0,.55); backdrop-filter: blur(4px);
+  display: none; align-items: center; justify-content: center;
+}
+#panel-manager-box {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 6px; width: 340px; max-height: 80vh;
+  display: flex; flex-direction: column;
+  box-shadow: 0 0 50px rgba(0,240,255,.08);
+}
+.pm-header {
+  padding: 12px 16px; border-bottom: 1px solid var(--border);
+  display: flex; justify-content: space-between; align-items: center;
+  font-family: var(--font-hud); font-size: 10px; color: var(--accent); letter-spacing: 3px;
+}
+.pm-close {
+  background: none; border: none; color: var(--muted); font-size: 16px; cursor: pointer;
+}
+.pm-close:hover { color: var(--text); }
+.pm-body { padding: 14px 16px; overflow-y: auto; flex: 1; }
+.pm-body::-webkit-scrollbar { width: 3px; }
+.pm-body::-webkit-scrollbar-thumb { background: var(--border); }
+.pm-section {
+  font-size: 9px; color: var(--muted); letter-spacing: 2px; text-transform: uppercase;
+  margin: 12px 0 8px; padding-bottom: 4px; border-bottom: 1px solid var(--border);
+}
+.pm-section:first-child { margin-top: 0; }
+.pm-panel-row {
+  display: flex; align-items: center; gap: 10px; padding: 6px 0;
+  border-bottom: 1px solid rgba(26,42,74,.4);
+}
+.pm-panel-icon { font-size: 13px; width: 20px; text-align: center; }
+.pm-panel-name { flex: 1; font-size: 10px; color: var(--text); }
+.pm-panel-size { font-size: 9px; color: var(--muted); font-family: var(--font-mono); }
+.pm-toggle { position: relative; width: 32px; height: 16px; cursor: pointer; }
+.pm-toggle input { opacity: 0; width: 0; height: 0; }
+.pm-slider {
+  position: absolute; inset: 0; background: rgba(74,96,128,.5);
+  border-radius: 8px; transition: .2s;
+}
+.pm-toggle input:checked + .pm-slider { background: rgba(0,240,255,.6); }
+.pm-slider::before {
+  content: ''; position: absolute; left: 2px; top: 2px;
+  width: 12px; height: 12px; background: #fff; border-radius: 50%; transition: .2s;
+}
+.pm-toggle input:checked + .pm-slider::before { transform: translateX(16px); }
+.pm-action-btn {
+  width: 100%; padding: 7px; margin-bottom: 6px;
+  font-family: var(--font-hud); font-size: 9px; font-weight: 700; letter-spacing: 2px;
+  border-radius: 3px; cursor: pointer; border: 1px solid; transition: all .2s; text-align: left;
+}
+.pm-action-accent { color: var(--accent); border-color: rgba(0,240,255,.4); background: rgba(0,240,255,.06); }
+.pm-action-accent:hover { background: rgba(0,240,255,.18); }
+.pm-action-danger { color: var(--danger); border-color: rgba(255,58,58,.4); background: rgba(255,58,58,.04); }
+.pm-action-danger:hover { background: rgba(255,58,58,.18); }
+.pm-add-row {
+  display: flex; gap: 6px; align-items: center; padding: 6px 0;
+  border-bottom: 1px solid rgba(26,42,74,.4);
+}
+.pm-add-name { flex: 1; font-size: 10px; color: var(--muted); }
+.pm-add-btn {
+  font-size: 9px; padding: 3px 8px; cursor: pointer;
+  border: 1px solid rgba(0,240,255,.4); background: rgba(0,240,255,.06);
+  color: var(--accent); border-radius: 2px; font-family: var(--font-hud);
+}
+.pm-add-btn:hover { background: rgba(0,240,255,.18); }
+.pm-add-btn.already { opacity: .4; cursor: not-allowed; }
+
+/* ── 自訂面板（可新增的） ─────────────────────────────── */
+.custom-panel {
+  position: absolute; background: rgba(10,15,30,.92);
+  border: 1px solid var(--border); border-radius: 4px; padding: 14px;
+  pointer-events: all; backdrop-filter: blur(8px); min-width: 200px;
+  box-shadow: 0 0 40px rgba(0,240,255,.05);
+}
+.custom-panel .panel-header h2 {
+  font-family: var(--font-hud); font-size: 9px; font-weight: 700; letter-spacing: 3px;
+}
+
+/* 版面設計模式切換按鈕 */
+.btn-layout {
+  color: #8899aa; border-color: rgba(136,153,170,.4); background: rgba(136,153,170,.06);
+}
+.btn-layout:hover { background: rgba(136,153,170,.18); }
+.btn-layout.layout-on {
+  color: var(--accent); border-color: rgba(0,240,255,.5); background: rgba(0,240,255,.1);
+  box-shadow: 0 0 10px rgba(0,240,255,.15);
+}
+
+#toast {
+  position: absolute; top: 68px; right: 16px;
+  font-family: var(--font-hud); font-size: 10px; font-weight: 700; letter-spacing: 2px;
+  padding: 9px 14px; border-radius: 3px;
+  border: 1px solid rgba(0,240,255,.4); background: rgba(0,240,255,.1); color: var(--accent);
+  pointer-events: none; opacity: 0; transition: opacity .3s; text-transform: uppercase;
+}
+#toast.show { opacity: 1; }
+
+#loading {
+  position: fixed; inset: 0; background: var(--bg);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  z-index: 9999; transition: opacity .7s;
+}
+#loading h1 { font-family: var(--font-hud); font-size: 30px; font-weight: 900; color: var(--accent); letter-spacing: 6px; text-shadow: 0 0 30px rgba(0,240,255,.5); margin-bottom: 8px; }
+#loading p  { font-size: 11px; color: var(--muted); letter-spacing: 3px; }
+.load-bar  { width: 180px; height: 2px; background: var(--border); margin-top: 24px; border-radius: 1px; overflow: hidden; }
+.load-fill { height: 100%; background: var(--accent); animation: lfill 1.4s ease forwards; }
+@keyframes lfill { from{width:0} to{width:100%} }
+</style>
+</head>
+<body class="clickable-map">
+
+<div id="loading">
+  <h1>R·W·B·H</h1>
+  <p>REAL WORLD BULLET HELL — INITIALIZING</p>
+  <div class="load-bar"><div class="load-fill"></div></div>
+</div>
+
+<div id="map"></div>
+
+<!-- 戰鬥覆蓋層（Phase 4） -->
+<div id="battle-overlay">
+  <canvas id="battle-canvas"></canvas>
+</div>
+
+<!-- 商城 Modal（Phase 5） -->
+<div class="modal-overlay" id="shop-modal">
+  <div class="modal-box">
+    <div class="modal-header">
+      ◈ 變異武器商城
+      <button class="modal-close" onclick="SHOP.closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="font-size:10px;color:var(--muted);margin-bottom:10px;">
+        使用 <span style="color:var(--accent)">◈ 變異結晶</span> 購買武器。購買後自動裝備至主武器槽。
+      </div>
+      <div id="shop-items"><div style="color:var(--muted);text-align:center;padding:20px">載入中...</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- 背包 Modal（Phase 5） -->
+<div class="modal-overlay" id="inventory-modal">
+  <div class="modal-box">
+    <div class="modal-header">
+      ⊞ 武器背包
+      <button class="modal-close" onclick="INVENTORY.closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="inventory-slots"><div style="color:var(--muted);text-align:center;padding:20px">載入中...</div></div>
+    </div>
+  </div>
+</div>
+
+<div id="hud">
+  <div id="scanline"></div>
+  <div class="corner c-tl"></div>
+  <div class="corner c-tr"></div>
+  <div class="corner c-bl"></div>
+  <div class="corner c-br"></div>
+
+  <!-- 頂部列 -->
+  <div id="top-bar">
+    <div class="game-title">R·W·B·H</div>
+    <div class="vline"></div>
+    <div class="stat-block">
+      <div class="stat-label">HP</div>
+      <div class="bar-track"><div class="bar-fill bar-hp" id="bar-hp" style="width:100%"></div></div>
+    </div>
+    <div class="stat-block">
+      <div class="stat-label">異變</div>
+      <div class="bar-track"><div class="bar-fill bar-anomaly" id="bar-anomaly" style="width:0%"></div></div>
+    </div>
+    <div class="vline"></div>
+    <div class="crystal-row">
+      <span>◈</span>
+      <span id="crystal-val">0</span>
+      <span class="crystal-lbl">變異結晶</span>
+    </div>
+    <div id="coords">
+      <div id="coord-lat">LAT —</div>
+      <div id="coord-lng">LNG —</div>
+    </div>
+  </div>
+
+  <!-- 掃描面板（座標已移至右側目的地面板） -->
+  <div id="scan-panel">
+    <div class="panel-header">
+      <h2>⬡ 掃描區域</h2>
+      <button class="panel-toggle-btn" data-target="scan-panel" title="折疊/展開">▼</button>
+    </div>
+    <div class="panel-body">
+      <div class="field-group">
+        <div class="field-label">搜尋半徑 (m)</div>
+        <input class="field" id="input-radius" type="number" value="800" min="200" max="3000" step="100">
+      </div>
+      <div id="scan-status"></div>
+      <button class="scan-btn" id="btn-scan">▶ 開始掃描</button>
+      <div id="log"><span class="log-info">// 系統就緒，點擊地圖設定位置...</span></div>
+    </div>
+    <div class="resize-handle" data-panel="scan-panel"></div>
+    <div class="panel-delete-btn" data-panel="scan-panel" title="隱藏面板">✕</div>
+    <div class="panel-size-label" id="scan-size-label"></div>
+  </div>
+
+  <!-- 想前往的地點面板（右側） -->
+  <div id="dest-panel">
+    <div class="panel-header">
+      <h2>📍 想前往的地點</h2>
+      <button class="panel-toggle-btn" data-target="dest-panel" title="折疊/展開">▼</button>
+    </div>
+    <div class="panel-body">
+      <!-- 座標顯示 -->
+      <div class="coord-display-row">
+        <div class="coord-box">
+          <div class="coord-box-label">緯度</div>
+          <div class="coord-box-val" id="display-lat">24.797590</div>
+        </div>
+        <div class="coord-box">
+          <div class="coord-box-label">經度</div>
+          <div class="coord-box-val" id="display-lng">120.995540</div>
+        </div>
+      </div>
+      <div id="click-hint">點擊地圖可移動玩家位置</div>
+
+      <hr class="dest-divider">
+
+      <!-- 地名搜尋 -->
+      <div class="dest-search-row">
+        <input class="field" id="dest-search-input" type="text" placeholder="輸入地名搜尋...">
+        <button class="dest-search-btn" id="dest-search-btn">→</button>
+      </div>
+      <div id="dest-result"></div>
+
+      <hr class="dest-divider">
+
+      <!-- 收藏 -->
+      <div class="fav-section-title">★ 收藏地點</div>
+      <div class="fav-add-row">
+        <input class="field" id="fav-name-input" type="text" placeholder="地點名稱（如：家）">
+        <button class="fav-add-btn" id="fav-add-btn" title="收藏當前玩家位置">+</button>
+      </div>
+      <div id="fav-list"></div>
+    </div>
+    <div class="resize-handle" data-panel="dest-panel"></div>
+    <div class="panel-delete-btn" data-panel="dest-panel" title="隱藏面板">✕</div>
+    <div class="panel-size-label" id="dest-size-label"></div>
+  </div>
+
+  <!-- 底部列 -->
+  <div id="bottom-bar">
+    <button class="hud-btn btn-shop" id="btn-shop">◈ 商城</button>
+    <button class="hud-btn btn-bag"  id="btn-bag">⊞ 背包</button>
+    <div class="event-counts">
+      <div class="count-item"><div class="dot dot-mob"></div><span id="mob-count">0 小怪</span></div>
+      <div class="count-item"><div class="dot dot-boss"></div><span id="boss-count">0 Boss</span></div>
+    </div>
+    <button class="hud-btn btn-layout" id="btn-layout" title="版面設計模式">⊹ 版面</button>
+    <button class="hud-btn btn-locate" id="btn-locate">◎ 定位</button>
+  </div>
+
+  <div id="toast"></div>
+  <div id="stats-bar"></div>
+</div>
+
+<!-- 版面管理器 Modal -->
+<div id="panel-manager-overlay">
+  <div id="panel-manager-box">
+    <div class="pm-header">
+      ⊹ 版面設計
+      <button class="pm-close" id="pm-close-btn">✕</button>
+    </div>
+    <div class="pm-body">
+      <div class="pm-section">顯示 / 隱藏面板</div>
+      <div id="pm-panel-list"></div>
+
+      <div class="pm-section">新增面板</div>
+      <div id="pm-add-list"></div>
+
+      <div class="pm-section">版面操作</div>
+      <button class="pm-action-btn pm-action-accent" onclick="PANEL_MGR.resetLayout()">↺ 重置所有面板位置與大小</button>
+      <button class="pm-action-btn pm-action-danger" onclick="PANEL_MGR.resetAll()">⚠ 清除全部設定（恢復預設）</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="state.js"></script>
+<script src="api.js"></script>
+<script src="sfx.js"></script>
+<script src="vfx.js"></script>
+<script src="bullets.js"></script>
+<script src="player.js"></script>
+<script src="enemy.js"></script>
+<script src="battle_canvas.js"></script>
+<script src="transition.js"></script>
+<script src="inventory.js"></script>
+<script src="shop.js"></script>
+<script src="map.js"></script>
+
+<script>
+// ── 開發者作弊模式（快速按 a→s→d→f 啟用）───────────────────────────────────
+window.CHEAT = false;
+(function () {
+  const SEQ = ['a', 's', 'd', 'f'];
+  let idx = 0, lastT = 0;
+
+  document.addEventListener('keydown', e => {
+    if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return;
+    const key = e.key.toLowerCase();
+    const now  = Date.now();
+    if (now - lastT > 1000) idx = 0;   // 超過 1 秒重置
+    lastT = now;
+
+    if (key === SEQ[idx]) {
+      idx++;
+      if (idx === SEQ.length) {
+        idx = 0;
+        _toggleCheat();
+      }
+    } else {
+      idx = (key === SEQ[0]) ? 1 : 0;
+    }
+  });
+
+  function _toggleCheat() {
+    window.CHEAT = !window.CHEAT;
+    if (window.CHEAT) {
+      // 無限結晶
+      STATE.addCrystals(999999);
+      // 自動擁有所有武器並裝備最強的
+      const allIds = Object.keys(window._WEAPON_DATA || {});
+      allIds.forEach(id => INVENTORY.own(id));
+      if (allIds.includes('seeker')) INVENTORY.equip('seeker', 0);
+      HUD.toast('🔧 DEV MODE ON — 無限結晶 / 無敵 / 秒殺 / 全武器', 3500);
+      // 在 HUD 右上角顯示持續標示
+      let devEl = document.getElementById('dev-indicator');
+      if (!devEl) {
+        devEl = document.createElement('div');
+        devEl.id = 'dev-indicator';
+        devEl.style.cssText = 'position:fixed;top:60px;right:16px;z-index:1100;font-family:var(--font-hud);font-size:9px;font-weight:700;letter-spacing:2px;color:#ffaa00;background:rgba(0,0,0,.6);padding:4px 10px;border:1px solid rgba(255,170,0,.4);border-radius:3px;pointer-events:none;';
+        devEl.textContent = '🔧 DEV MODE';
+        document.getElementById('hud').appendChild(devEl);
+      }
+    } else {
+      document.getElementById('dev-indicator')?.remove();
+      HUD.toast('DEV MODE OFF', 2000);
+    }
+  }
+})();
+
+// ══════════════════════════════════════════════════════════════════
+//  面板管理系統（PANEL_MGR）
+// ══════════════════════════════════════════════════════════════════
+
+const PANEL_MGR = {
+  // 所有已登記的面板定義
+  registry: {
+    'scan-panel': { title: '⬡ 掃描面板', icon: '⬡', removable: false,
+      defaultState: { top: 82, left: 16, width: 260 } },
+    'dest-panel': { title: '📍 想前往的地點', icon: '📍', removable: false,
+      defaultState: { top: 82, right: 16, width: 270 } },
+    'stats-panel': { title: '📊 遊戲統計', icon: '📊', removable: true,
+      defaultState: { top: 82, left: 296, width: 220 },
+      contentHTML: () => `<div id="stats-content" style="font-size:9px;color:var(--muted);line-height:2">載入中...</div>`,
+      initFn: () => PANEL_MGR._initStatsPanel() },
+    'notes-panel': { title: '📝 筆記本', icon: '📝', removable: true,
+      defaultState: { top: 82, right: 306, width: 220 },
+      contentHTML: () => `<textarea id="notes-textarea" style="width:100%;height:120px;background:rgba(0,0,0,.4);border:1px solid var(--border);color:var(--text);font-family:var(--font-mono);font-size:10px;border-radius:3px;padding:6px;resize:none" placeholder="輸入筆記..." oninput="PANEL_MGR._saveNotes(this.value)"></textarea>`,
+      initFn: () => {
+        const saved = localStorage.getItem('rwbh_notes');
+        const ta = document.getElementById('notes-textarea');
+        if (saved && ta) ta.value = saved;
+      }
+    },
+  },
+
+  // 目前存在於 DOM 的面板 ID（含自訂）
+  activePanels: ['scan-panel', 'dest-panel'],
+  designMode: false,
+
+  // ── 初始化 ────────────────────────────────────────────────
+  init() {
+    // 為所有初始面板設定可拖曳、可折疊、可縮放
+    this.activePanels.forEach(id => this._setupPanel(id));
+    // 載入已儲存的版面設定
+    this.loadLayout();
+    // 初始化版面管理器 UI
+    this._buildManagerUI();
+    // 版面按鈕
+    document.getElementById('btn-layout').addEventListener('click', () => this.toggleDesignMode());
+    document.getElementById('pm-close-btn').addEventListener('click', () => this.closeManager());
+    document.getElementById('panel-manager-overlay').addEventListener('click', e => {
+      if (e.target === e.currentTarget) this.closeManager();
+    });
+  },
+
+  // ── 面板設置（拖曳 + 折疊 + 縮放） ───────────────────────
+  _setupPanel(panelId) {
+    const panel = document.getElementById(panelId);
+    if (!panel) return;
+    this._makeDraggable(panel);
+    this._makeCollapsible(panel);
+    this._makeResizable(panel);
+    this._setupDeleteBtn(panel);
+  },
+
+  _makeDraggable(panel) {
+    const handle = panel.querySelector('.panel-header h2') || panel.querySelector('h2');
+    if (!handle) return;
+    let dragging = false, sx, sy, ox, oy;
+
+    handle.addEventListener('mousedown', e => {
+      // 如果點擊的是折疊按鈕，不觸發拖曳
+      if (e.target.classList.contains('panel-toggle-btn')) return;
+      dragging = true;
+      sx = e.clientX; sy = e.clientY;
+      ox = panel.offsetLeft; oy = panel.offsetTop;
+      handle.style.cursor = 'grabbing';
+      e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', e => {
+      if (!dragging) return;
+      const nx = ox + (e.clientX - sx);
+      const ny = oy + (e.clientY - sy);
+      const maxX = window.innerWidth  - panel.offsetWidth  - 4;
+      const maxY = window.innerHeight - panel.offsetHeight - 4;
+      panel.style.left  = Math.max(4,  Math.min(nx, maxX)) + 'px';
+      panel.style.top   = Math.max(58, Math.min(ny, maxY)) + 'px';
+      panel.style.right = 'auto';
+      this._updateSizeLabel(panel);
+      this.saveLayout();
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (!dragging) return;
+      dragging = false;
+      handle.style.cursor = 'grab';
+    });
+  },
+
+  _makeCollapsible(panel) {
+    const btn = panel.querySelector('.panel-toggle-btn');
+    if (!btn) return;
+    btn.addEventListener('mousedown', e => e.stopPropagation());
+    btn.addEventListener('click', () => {
+      const collapsed = panel.classList.toggle('panel-collapsed');
+      btn.textContent = collapsed ? '▶' : '▼';
+      this.saveLayout();
+    });
+  },
+
+  _makeResizable(panel) {
+    const handle = panel.querySelector('.resize-handle');
+    if (!handle) return;
+    let resizing = false, sx, sw;
+
+    handle.addEventListener('mousedown', e => {
+      resizing = true;
+      sx = e.clientX;
+      sw = panel.offsetWidth;
+      e.preventDefault();
+      e.stopPropagation();
+    });
+
+    document.addEventListener('mousemove', e => {
+      if (!resizing) return;
+      const newW = Math.max(180, Math.min(sw + (e.clientX - sx), 600));
+      panel.style.width = newW + 'px';
+      this._updateSizeLabel(panel);
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (!resizing) return;
+      resizing = false;
+      this.saveLayout();
+    });
+  },
+
+  _setupDeleteBtn(panel) {
+    const btn = panel.querySelector('.panel-delete-btn');
+    if (!btn) return;
+    btn.addEventListener('mousedown', e => e.stopPropagation());
+    btn.addEventListener('click', () => this.hidePanel(panel.id));
+  },
+
+  _updateSizeLabel(panel) {
+    const lbl = panel.querySelector('.panel-size-label');
+    if (lbl) lbl.textContent = `${panel.offsetWidth}×${panel.offsetHeight}px`;
+  },
+
+  // ── 版面設計模式 ─────────────────────────────────────────
+  toggleDesignMode() {
+    this.designMode = !this.designMode;
+    document.getElementById('hud').classList.toggle('design-mode-active', this.designMode);
+    const btn = document.getElementById('btn-layout');
+    btn.classList.toggle('layout-on', this.designMode);
+    btn.textContent = this.designMode ? '✓ 完成' : '⊹ 版面';
+    if (this.designMode) {
+      HUD.toast('版面設計模式 — 拖曳移動、拖角縮放、✕ 隱藏', 3000);
+      this.activePanels.forEach(id => this._updateSizeLabel(document.getElementById(id)));
+    } else {
+      this.openManager();
+    }
+  },
+
+  // ── 版面管理器 ────────────────────────────────────────────
+  openManager() {
+    this._buildManagerUI();
+    document.getElementById('panel-manager-overlay').style.display = 'flex';
+  },
+  closeManager() {
+    document.getElementById('panel-manager-overlay').style.display = 'none';
+  },
+
+  _buildManagerUI() {
+    // 已存在的面板
+    const listEl = document.getElementById('pm-panel-list');
+    listEl.innerHTML = Object.entries(this.registry)
+      .filter(([id]) => document.getElementById(id))
+      .map(([id, def]) => {
+        const panel = document.getElementById(id);
+        const visible = panel?.style.display !== 'none';
+        const w = panel?.offsetWidth || 0;
+        return `<div class="pm-panel-row">
+          <span class="pm-panel-icon">${def.icon}</span>
+          <span class="pm-panel-name">${def.title}</span>
+          <span class="pm-panel-size">${w}px</span>
+          <label class="pm-toggle">
+            <input type="checkbox" ${visible ? 'checked' : ''} onchange="PANEL_MGR.togglePanelVisible('${id}',this.checked)">
+            <span class="pm-slider"></span>
+          </label>
+        </div>`;
+      }).join('');
+
+    // 可新增的面板
+    const addEl = document.getElementById('pm-add-list');
+    addEl.innerHTML = Object.entries(this.registry)
+      .filter(([id, def]) => def.removable && !document.getElementById(id))
+      .map(([id, def]) => `
+        <div class="pm-add-row">
+          <span class="pm-panel-icon">${def.icon}</span>
+          <span class="pm-add-name">${def.title}</span>
+          <button class="pm-add-btn" onclick="PANEL_MGR.addPanel('${id}')">+ 新增</button>
+        </div>`).join('') || '<div style="font-size:9px;color:var(--muted);padding:4px">所有面板已存在</div>';
+  },
+
+  // ── 面板顯示 / 隱藏 ──────────────────────────────────────
+  togglePanelVisible(id, visible) {
+    const panel = document.getElementById(id);
+    if (panel) panel.style.display = visible ? '' : 'none';
+    this.saveLayout();
+  },
+
+  hidePanel(id) {
+    const panel = document.getElementById(id);
+    if (panel) panel.style.display = 'none';
+    this.saveLayout();
+    HUD.toast('面板已隱藏 — 可從「版面」按鈕恢復');
+  },
+
+  // ── 新增自訂面板 ─────────────────────────────────────────
+  addPanel(type) {
+    const def = this.registry[type];
+    if (!def || document.getElementById(type)) return;
+
+    const panel = document.createElement('div');
+    panel.id = type;
+    panel.className = 'custom-panel';
+    panel.style.cssText = `top:${def.defaultState.top}px;` +
+      (def.defaultState.left ? `left:${def.defaultState.left}px;` : `right:${def.defaultState.right}px;`) +
+      `width:${def.defaultState.width}px;`;
+
+    panel.innerHTML = `
+      <div class="panel-header">
+        <h2 style="color:var(--accent);font-family:var(--font-hud);font-size:9px;letter-spacing:3px;cursor:grab">${def.title}</h2>
+        <button class="panel-toggle-btn" data-target="${type}">▼</button>
+      </div>
+      <div class="panel-body">${def.contentHTML ? def.contentHTML() : ''}</div>
+      <div class="resize-handle" data-panel="${type}"></div>
+      <div class="panel-delete-btn" data-panel="${type}">✕</div>
+      <div class="panel-size-label"></div>
+    `;
+
+    document.getElementById('hud').appendChild(panel);
+    this.activePanels.push(type);
+    this._setupPanel(type);
+    if (def.initFn) setTimeout(def.initFn, 50);
+    this.saveLayout();
+    this._buildManagerUI();
+  },
+
+  // ── 統計面板 ─────────────────────────────────────────────
+  _initStatsPanel() {
+    const update = async () => {
+      try {
+        const r = await fetch('/api/stats');
+        const d = await r.json();
+        const el = document.getElementById('stats-content');
+        if (el && d.ok)
+          el.innerHTML = `勝場 <b style="color:var(--green)">${d.total_wins}</b> / ${d.total_battles}<br>
+            結晶 <b style="color:var(--accent)">${d.total_crystals}</b><br>
+            擊敗 <b style="color:var(--warning)">${d.defeated_count}</b> 個事件<br>
+            異變 <b style="color:var(--boss)">${d.anomaly_level}%</b>`;
+      } catch(_) {}
+    };
+    update();
+    setInterval(update, 10000);
+  },
+
+  _saveNotes(v) { localStorage.setItem('rwbh_notes', v); },
+
+  // ── 版面儲存 / 載入 ──────────────────────────────────────
+  saveLayout() {
+    const state = {};
+    this.activePanels.forEach(id => {
+      const panel = document.getElementById(id);
+      if (!panel) return;
+      state[id] = {
+        top:       panel.offsetTop,
+        left:      panel.style.right === 'auto' ? panel.offsetLeft : null,
+        right:     panel.style.right !== 'auto' ? parseInt(panel.style.right) || null : null,
+        width:     panel.offsetWidth,
+        collapsed: panel.classList.contains('panel-collapsed'),
+        visible:   panel.style.display !== 'none',
+        custom:    this.registry[id]?.removable || false,
+      };
+    });
+    localStorage.setItem('rwbh_panel_layout', JSON.stringify(state));
+  },
+
+  loadLayout() {
+    try {
+      const saved = localStorage.getItem('rwbh_panel_layout');
+      if (!saved) return;
+      const state = JSON.parse(saved);
+      Object.entries(state).forEach(([id, s]) => {
+        // 如果是自訂面板且尚未在 DOM 中，先新增
+        if (s.custom && !document.getElementById(id)) {
+          this.addPanel(id);
+        }
+        const panel = document.getElementById(id);
+        if (!panel) return;
+        panel.style.top = s.top + 'px';
+        if (s.left !== null && s.left !== undefined) {
+          panel.style.left  = s.left + 'px';
+          panel.style.right = 'auto';
+        } else if (s.right !== null && s.right !== undefined) {
+          panel.style.right = s.right + 'px';
+          panel.style.left  = 'auto';
+        }
+        if (s.width) panel.style.width = s.width + 'px';
+        if (s.collapsed) {
+          panel.classList.add('panel-collapsed');
+          const btn = panel.querySelector('.panel-toggle-btn');
+          if (btn) btn.textContent = '▶';
+        }
+        if (!s.visible) panel.style.display = 'none';
+      });
+    } catch(e) { /* 版面載入失敗，使用預設 */ }
+  },
+
+  resetLayout() {
+    this.activePanels.forEach(id => {
+      const panel = document.getElementById(id);
+      const def   = this.registry[id];
+      if (!panel || !def) return;
+      const ds = def.defaultState;
+      panel.style.top   = ds.top + 'px';
+      panel.style.width = ds.width + 'px';
+      panel.classList.remove('panel-collapsed');
+      const btn = panel.querySelector('.panel-toggle-btn');
+      if (btn) btn.textContent = '▼';
+      panel.style.display = '';
+      if (ds.left  !== undefined) { panel.style.left  = ds.left  + 'px'; panel.style.right = 'auto'; }
+      if (ds.right !== undefined) { panel.style.right = ds.right + 'px'; panel.style.left  = 'auto'; }
+    });
+    this.saveLayout();
+    HUD.toast('版面已重置', 2000);
+  },
+
+  resetAll() {
+    localStorage.removeItem('rwbh_panel_layout');
+    localStorage.removeItem('rwbh_notes');
+    location.reload();
+  },
+};
+
+// 初始化由 load 事件後呼叫（避免提早執行）
+
+// ── 想前往的地點面板邏輯 ──────────────────────────────────────────────────────
+
+// 目前搜尋到的地點（供收藏使用）
+let _destSearchResult = null;
+
+// 地名搜尋
+async function destSearch() {
+  const q = document.getElementById('dest-search-input').value.trim();
+  if (!q) return;
+  const el = document.getElementById('dest-result');
+  el.textContent = '搜尋中...';
+  document.getElementById('dest-search-btn').disabled = true;
+
+  const result = await API.geocode(q);
+  document.getElementById('dest-search-btn').disabled = false;
+
+  if (!result.ok) {
+    el.innerHTML = `<span style="color:var(--danger)">找不到「${q}」</span>`;
+    _destSearchResult = null;
+    return;
+  }
+
+  const { lat, lng, display_name } = result.data;
+  if (lat == null || lng == null) {
+    el.innerHTML = `<span style="color:var(--danger)">搜尋失敗</span>`;
+    return;
+  }
+  _destSearchResult = { lat, lng, name: q };
+
+  // 顯示可點擊結果
+  const shortName = (display_name || q).split(',').slice(0, 3).join(',');
+  el.innerHTML = `<button class="dest-result-btn" id="dest-fly-btn">
+    📍 ${shortName}<br>
+    <span style="color:var(--muted);font-size:8px">${lat.toFixed(5)}, ${lng.toFixed(5)} — 點擊飛往</span>
+  </button>`;
+
+  document.getElementById('dest-fly-btn').addEventListener('click', () => {
+    window.MAP?.map?.flyTo([lat, lng], 16, { duration: 1.2 });
+    HUD.toast(`飛往 ${q}`, 1800);
+    // 預填收藏名稱
+    const nameInput = document.getElementById('fav-name-input');
+    if (!nameInput.value) nameInput.value = q;
+  });
+}
+
+document.getElementById('dest-search-btn').addEventListener('click', destSearch);
+document.getElementById('dest-search-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') destSearch();
+});
+
+// ── 收藏地點邏輯 ──────────────────────────────────────────────────────────────
+
+async function loadFavorites() {
+  const result = await API.favoritesGet();
+  if (!result.ok) return;
+  renderFavorites(result.data.favorites || []);
+  window.MAP?.renderFavorites?.(result.data.favorites || []);
+}
+
+function renderFavorites(favs) {
+  const list = document.getElementById('fav-list');
+  if (!favs.length) {
+    list.innerHTML = `<div style="font-size:9px;color:var(--muted);text-align:center;padding:8px">尚無收藏地點</div>`;
+    return;
+  }
+  list.innerHTML = favs.map(f => `
+    <div class="fav-item" data-id="${f.id}">
+      <span class="fav-star">★</span>
+      <span class="fav-name" title="${f.name}">${f.name}</span>
+      <button class="fav-fly-btn" onclick="FAV.fly('${f.id}',${f.lat},${f.lng})">飛往</button>
+      <button class="fav-del-btn" onclick="FAV.del('${f.id}')">刪除</button>
+    </div>
+  `).join('');
+}
+
+window.FAV = {
+  fly(id, lat, lng) {
+    window.MAP?.map?.flyTo([lat, lng], 16, { duration: 1.2 });
+    HUD.toast('飛往收藏地點', 1500);
+  },
+  async del(id) {
+    await API.favoriteDelete(id);
+    window.MAP?.removeFavoriteMarker?.(id);
+    await loadFavorites();
+    HUD.toast('已刪除收藏', 1500);
+  },
+};
+
+// 新增收藏按鈕
+document.getElementById('fav-add-btn').addEventListener('click', async () => {
+  const nameInput = document.getElementById('fav-name-input');
+  const name = nameInput.value.trim();
+  if (!name) { HUD.toast('請輸入地點名稱'); return; }
+
+  const lat = STATE.player.lat;
+  const lng = STATE.player.lng;
+  if (lat == null || lng == null) { HUD.toast('請先設定玩家位置'); return; }
+
+  const result = await API.favoriteAdd(name, lat, lng);
+  if (!result.ok) { HUD.toast('收藏失敗'); return; }
+
+  nameInput.value = '';
+  window.MAP?.addFavoriteMarker?.(result.data.favorite);
+  await loadFavorites();
+  HUD.toast(`★ 已收藏「${name}」`, 2000);
+});
+
+// Folium 匯出
+document.getElementById('fav-export-btn').addEventListener('click', () => {
+  const lat = STATE.player.lat || 24.797590;
+  const lng = STATE.player.lng || 120.995540;
+  window.open(`/api/export/folium?lat=${lat}&lng=${lng}`, '_blank');
+  HUD.toast('📥 Folium 地圖下載中...', 2000);
+});
+
+// ── GPS 狀態 ──────────────────────────────────────────────────────────────────
+// map.js 讀取 window.GPS_ACTIVE 判斷是否鎖定點擊移動
+window.GPS_ACTIVE = false;
+let gpsWatchId   = null;
+
+// ── HUD 工具 ──────────────────────────────────────────────────────────────────
+
+window.HUD = {
+  log(msg, type = "") {
+    const el   = document.getElementById("log");
+    const line = document.createElement("div");
+    if (type) line.className = "log-" + type;
+    line.textContent = "> " + msg;
+    el.appendChild(line);
+    el.scrollTop = el.scrollHeight;
+  },
+
+  toast(msg, duration = 2400) {
+    const t = document.getElementById("toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    clearTimeout(t._tid);
+    t._tid = setTimeout(() => t.classList.remove("show"), duration);
+  },
+
+  setHP(pct)       { document.getElementById("bar-hp").style.width      = pct + "%"; },
+  setAnomaly(pct)  { document.getElementById("bar-anomaly").style.width  = pct + "%"; },
+  setCrystals(n)   { document.getElementById("crystal-val").textContent  = n; },
+  setEventCounts(mobs, bosses) {
+    document.getElementById("mob-count").textContent  = mobs   + " 小怪";
+    document.getElementById("boss-count").textContent = bosses + " Boss";
+  },
+};
+
+// ── 座標顯示同步（玩家位置改變時更新面板） ────────────────────────────────────
+
+document.addEventListener("playerMoved", e => {
+  const { lat, lng } = e.detail;
+  document.getElementById("display-lat").textContent = lat.toFixed(6);
+  document.getElementById("display-lng").textContent = lng.toFixed(6);
+});
+
+document.addEventListener("crystalsChanged", e => HUD.setCrystals(e.detail.crystals));
+document.addEventListener("hpChanged",       e => HUD.setHP(Math.round(e.detail.hp / e.detail.maxHp * 100)));
+document.addEventListener("poisUpdated", () => {
+  HUD.setEventCounts(STATE.world.mobCount, STATE.world.bossCount);
+  // Phase 3：異變進度條根據附近 Boss 數量自動增長
+  const bossCount = STATE.world.bossCount;
+  const anomalyPct = Math.min(100, bossCount * 12);
+  HUD.setAnomaly(anomalyPct);
+});
+
+// ── 掃描（只在玩家按下按鈕時執行）────────────────────────────────────────────
+
+function setScanStatus(msg, color = "") {
+  const el = document.getElementById("scan-status");
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = color || "var(--accent)";
+}
+
+async function startScan() {
+  const lat = STATE.player.lat;
+  const lng = STATE.player.lng;
+  if (!lat || !lng) { HUD.log("尚未設定玩家位置", "err"); return; }
+
+  const btn    = document.getElementById("btn-scan");
+  const radius = parseInt(document.getElementById("input-radius").value) || 800;
+
+  btn.disabled    = true;
+  btn.textContent = "◌ 掃描中...";
+  document.getElementById("log").innerHTML = "";
+  setScanStatus("▷ 呼叫 Overpass API...");
+
+  HUD.log(`掃描中心：${lat.toFixed(5)}, ${lng.toFixed(5)}`, "info");
+  HUD.log(`搜尋半徑 ${radius}m，含 OSRM 步行距離...`);
+
+  try {
+    const result = await API.scan(lat, lng, radius);
+    if (!result.ok) {
+      setScanStatus("✗ 掃描失敗", "var(--danger)");
+      HUD.log("掃描失敗：" + result.error, "err");
+      return;
+    }
+
+    const { pois, mob_count, boss_count, total } = result.data;
+    setScanStatus(`✓ 快取/完成（${total} 個事件）`, "var(--green)");
+    HUD.log(`發現 ${total} 個事件（${mob_count} 小怪 / ${boss_count} Boss）`, "ok");
+
+    const defeated = pois.filter(p => p.defeated).length;
+    if (defeated > 0) HUD.log(`已擊敗 ${defeated} 個事件`, "warn");
+
+    STATE.setPOIs(pois);
+    setTimeout(() => setScanStatus(""), 4000);
+
+  } catch (e) {
+    setScanStatus("✗ 網路錯誤", "var(--danger)");
+    HUD.log("錯誤：" + e.message, "err");
+    console.error(e);
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = "▶ 開始掃描";
+  }
+}
+
+// ── 定位按鈕（toggle GPS）────────────────────────────────────────────────────
+
+function setGpsActive(active) {
+  window.GPS_ACTIVE = active;
+  const btn  = document.getElementById("btn-locate");
+  const hint = document.getElementById("click-hint");
+
+  if (active) {
+    btn.classList.add("gps-active");
+    btn.textContent = "◎ 定位中";
+    hint.textContent = "GPS 定位中，自動更新位置";
+    hint.classList.add("gps-on");
+    document.body.classList.remove("clickable-map");  // 關閉十字游標
+  } else {
+    btn.classList.remove("gps-active");
+    btn.textContent = "◎ 定位";
+    hint.textContent = "點擊地圖可移動玩家位置";
+    hint.classList.remove("gps-on");
+    document.body.classList.add("clickable-map");
+  }
+}
+
+document.getElementById("btn-locate").addEventListener("click", () => {
+  if (!navigator.geolocation) { HUD.toast("瀏覽器不支援 GPS 定位"); return; }
+
+  if (window.GPS_ACTIVE) {
+    // 關閉 GPS
+    if (gpsWatchId !== null) {
+      navigator.geolocation.clearWatch(gpsWatchId);
+      gpsWatchId = null;
+    }
+    setGpsActive(false);
+    HUD.log("GPS 定位已關閉", "warn");
+    return;
+  }
+
+  // 開啟 GPS
+  HUD.log("正在取得 GPS 定位...", "info");
+  gpsWatchId = navigator.geolocation.watchPosition(
+    pos => {
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      setGpsActive(true);
+      STATE.setPlayerPos(lat, lng);
+      HUD.log(`GPS 更新：${lat.toFixed(5)}, ${lng.toFixed(5)}`, "ok");
+    },
+    err => {
+      HUD.log("GPS 失敗：" + err.message, "err");
+      setGpsActive(false);
+      if (gpsWatchId !== null) { navigator.geolocation.clearWatch(gpsWatchId); gpsWatchId = null; }
+    },
+    { enableHighAccuracy: true, maximumAge: 5000 }
+  );
+});
+
+// ── 其他按鈕 ──────────────────────────────────────────────────────────────────
+
+document.getElementById("btn-scan").addEventListener("click", startScan);
+document.getElementById("btn-shop").addEventListener("click", () => SHOP.openModal());
+document.getElementById("btn-bag").addEventListener("click",  () => {
+  INVENTORY.closeModal(); // reset
+  INVENTORY.openModal();
+});
+
+// 點擊 Modal 背景關閉
+document.getElementById("shop-modal").addEventListener("click", e => { if (e.target === e.currentTarget) SHOP.closeModal(); });
+document.getElementById("inventory-modal").addEventListener("click", e => { if (e.target === e.currentTarget) INVENTORY.closeModal(); });
+
+// ── 初始化：設定預設玩家位置（不自動掃描）────────────────────────────────────
+
+// ── 統計欄更新 ────────────────────────────────────────────────────────────────
+
+async function updateStatsBar() {
+  try {
+    const resp = await fetch("/api/stats");
+    const data = await resp.json();
+    if (!data.ok) return;
+    const s = data;
+    document.getElementById("stats-bar").innerHTML =
+      `勝場 ${s.total_wins}/${s.total_battles} ｜ 結晶 ${s.total_crystals} ｜ 擊敗 ${s.defeated_count} ｜ 異變 ${s.anomaly_level}%`;
+  } catch (e) { /* 靜默失敗 */ }
+}
+
+// ── 初始化 ────────────────────────────────────────────────────────────────────
+
+window.addEventListener("load", () => {
+  setTimeout(async () => {
+    const el = document.getElementById("loading");
+    el.style.opacity = "0";
+    setTimeout(() => el.remove(), 700);
+
+    const INIT_LAT = 24.797590;
+    const INIT_LNG = 120.995540;
+    STATE.player.lat = INIT_LAT;
+    STATE.player.lng = INIT_LNG;
+    document.getElementById("display-lat").textContent = INIT_LAT.toFixed(6);
+    document.getElementById("display-lng").textContent = INIT_LNG.toFixed(6);
+
+    // 初始化面板管理系統
+    PANEL_MGR.init();
+
+    // 套用 UI 版面設定（custom_layout.json）
+    try {
+      const lyResp = await fetch('/api/layout');
+      const lyData = await lyResp.json();
+      if (lyData.ok && lyData.layout) {
+        Object.entries(lyData.layout).forEach(([id, s]) => {
+          const panel = document.getElementById(id);
+          if (!panel) return;
+          if (s.top   != null) panel.style.top   = s.top   + 'px';
+          if (s.left  != null) { panel.style.left  = s.left  + 'px'; panel.style.right = 'auto'; }
+          if (s.right != null) { panel.style.right = s.right + 'px'; panel.style.left  = 'auto'; }
+          if (s.width != null) panel.style.width = s.width + 'px';
+          if (s.collapsed) {
+            panel.classList.add('panel-collapsed');
+            const btn = panel.querySelector('.panel-toggle-btn');
+            if (btn) btn.textContent = '▶';
+          }
+          if (s.visible === false) panel.style.display = 'none';
+        });
+      }
+    } catch (_) {}
+
+    // 載入開發者自訂設定（外觀/文案/機制）
+    try {
+      const cfgResp = await fetch('/api/config');
+      const cfgData = await cfgResp.json();
+      if (cfgData.ok && cfgData.config) {
+        const cfg = cfgData.config;
+        // 外觀設定（注入到 enemy.js / player.js）
+        if (cfg.visuals) window._CUSTOM_VISUALS = cfg.visuals;
+        // HUD 主題（CSS 變數）
+        if (cfg.theme?.vars) {
+          const root = document.documentElement;
+          Object.entries(cfg.theme.vars).forEach(([k, v]) => root.style.setProperty(k, v));
+        }
+        // 故事文案（注入到 map.js）
+        if (cfg.lore) window._CUSTOM_LORE = cfg.lore;
+        // 玩家機制（注入到 player.js）
+        if (cfg.mechanics) window._CUSTOM_MECHANICS = cfg.mechanics;
+      }
+    } catch (_) { /* 無自訂設定，使用預設 */ }
+
+    // 預載武器資料（供背包顯示使用）
+    await SHOP.preload();
+
+    // 載入收藏地點
+    await loadFavorites();
+
+    // 更新統計欄
+    updateStatsBar();
+  }, 1400);
+});
+</script>
+</body>
+</html>

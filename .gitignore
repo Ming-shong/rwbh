@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Flask / data（快取不需要版本控制）
+data/cache.json
+data/osrm_cache.json
+
+# 保留 world.json、favorites.json、custom_*.json
+# （這些是使用者資料，建議保留）
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 編輯器
+.vscode/
+*.swp
+
+# Leaflet 離線 tiles（體積大，不入版控）
+ui/tiles/

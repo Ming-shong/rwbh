@@ -1,0 +1,244 @@
+{
+  "events": [],
+  "defeated": [
+    "node-2621396710",
+    "node-6246613995",
+    "node-2623663867",
+    "node-2761345329",
+    "node-5160639640",
+    "node-1431267613",
+    "node-3761199050",
+    "node-2761345337",
+    "test-boss-1",
+    "way-257074758",
+    "way-161206055",
+    "way-217686004",
+    "node-2727292933",
+    "way-257026301",
+    "way-225951798",
+    "node-5142877522",
+    "node-1543862087",
+    "node-2627360915",
+    "node-2772886023",
+    "node-2721104795",
+    "node-6246614059",
+    "node-3688680683",
+    "node-2779032742",
+    "way-558811467",
+    "way-617167747",
+    "node-2617189626",
+    "node-2270099700"
+  ],
+  "anomaly_level": 100,
+  "battle_log": [
+    {
+      "poi_id": "node-2621396710",
+      "won": true,
+      "crystals": 24,
+      "damage_taken": 0,
+      "timestamp": 1780062546.6795855
+    },
+    {
+      "poi_id": "node-6246613995",
+      "won": true,
+      "crystals": 24,
+      "damage_taken": 0,
+      "timestamp": 1780062555.0652897
+    },
+    {
+      "poi_id": "node-2623663867",
+      "won": true,
+      "crystals": 29,
+      "damage_taken": 0,
+      "timestamp": 1780062563.8263867
+    },
+    {
+      "poi_id": "node-2761345329",
+      "won": true,
+      "crystals": 20,
+      "damage_taken": 0,
+      "timestamp": 1780062571.5171938
+    },
+    {
+      "poi_id": "node-5160639640",
+      "won": true,
+      "crystals": 104,
+      "damage_taken": 0,
+      "timestamp": 1780062610.5190563
+    },
+    {
+      "poi_id": "node-1431267613",
+      "won": true,
+      "crystals": 103,
+      "damage_taken": 0,
+      "timestamp": 1780062624.2375836
+    },
+    {
+      "poi_id": "node-3761199050",
+      "won": true,
+      "crystals": 23,
+      "damage_taken": 0,
+      "timestamp": 1780062673.711992
+    },
+    {
+      "poi_id": "node-2761345337",
+      "won": true,
+      "crystals": 26,
+      "damage_taken": 0,
+      "timestamp": 1780062684.4446368
+    },
+    {
+      "poi_id": "test-boss-1",
+      "won": true,
+      "crystals": 45,
+      "damage_taken": 0,
+      "poi_type": "boss",
+      "timestamp": 1780063361.1905577
+    },
+    {
+      "poi_id": "way-257074758",
+      "won": true,
+      "crystals": 111,
+      "damage_taken": 0,
+      "poi_type": "boss",
+      "timestamp": 1780063484.0925086
+    },
+    {
+      "poi_id": "way-161206055",
+      "won": true,
+      "crystals": 93,
+      "damage_taken": 0,
+      "poi_type": "boss",
+      "timestamp": 1780063522.284998
+    },
+    {
+      "poi_id": "way-217686004",
+      "won": true,
+      "crystals": 94,
+      "damage_taken": 0,
+      "poi_type": "boss",
+      "timestamp": 1780063547.0486012
+    },
+    {
+      "poi_id": "node-2727292933",
+      "won": true,
+      "crystals": 25,
+      "damage_taken": 0,
+      "poi_type": "mob",
+      "timestamp": 1780063561.2852597
+    },
+    {
+      "poi_id": "way-257026301",
+      "won": true,
+      "crystals": 142,
+      "damage_taken": 58,
+      "poi_type": "boss",
+      "timestamp": 1780063623.6152532
+    },
+    {
+      "poi_id": "way-225951798",
+      "won": true,
+      "crystals": 107,
+      "damage_taken": 0,
+      "poi_type": "boss",
+      "timestamp": 1780063651.3740425
+    },
+    {
+      "poi_id": "node-5142877522",
+      "won": true,
+      "crystals": 22,
+      "damage_taken": 0,
+      "poi_type": "mob",
+      "timestamp": 1780063659.6184397
+    },
+    {
+      "poi_id": "node-1543862087",
+      "won": true,
+      "crystals": 323,
+      "damage_taken": 63,
+      "poi_type": "boss",
+      "timestamp": 1780063739.2076306
+    },
+    {
+      "poi_id": "node-2627360915",
+      "won": true,
+      "crystals": 28,
+      "damage_taken": 0,
+      "poi_type": "mob",
+      "timestamp": 1780063772.6055663
+    },
+    {
+      "poi_id": "node-2772886023",
+      "won": true,
+      "crystals": 24,
+      "damage_taken": 0,
+      "poi_type": "mob",
+      "timestamp": 1780064382.725472
+    },
+    {
+      "poi_id": "node-2721104795",
+      "won": true,
+      "crystals": 22,
+      "damage_taken": 0,
+      "poi_type": "mob",
+      "timestamp": 1780064394.2865844
+    },
+    {
+      "poi_id": "node-6246614059",
+      "won": true,
+      "crystals": 17,
+      "damage_taken": 18,
+      "poi_type": "mob",
+      "timestamp": 1780064962.0961895
+    },
+    {
+      "poi_id": "node-3688680683",
+      "won": true,
+      "crystals": 22,
+      "damage_taken": 0,
+      "poi_type": "mob",
+      "timestamp": 1780065003.997195
+    },
+    {
+      "poi_id": "node-2779032742",
+      "won": true,
+      "crystals": 21,
+      "damage_taken": 0,
+      "poi_type": "mob",
+      "timestamp": 1780065016.0402515
+    },
+    {
+      "poi_id": "way-558811467",
+      "won": true,
+      "crystals": 86,
+      "damage_taken": 0,
+      "poi_type": "boss",
+      "timestamp": 1780065109.016864
+    },
+    {
+      "poi_id": "way-617167747",
+      "won": true,
+      "crystals": 69,
+      "damage_taken": 36,
+      "poi_type": "boss",
+      "timestamp": 1780065154.918456
+    },
+    {
+      "poi_id": "node-2617189626",
+      "won": true,
+      "crystals": 28,
+      "damage_taken": 0,
+      "poi_type": "mob",
+      "timestamp": 1780066130.2970164
+    },
+    {
+      "poi_id": "node-2270099700",
+      "won": true,
+      "crystals": 22,
+      "damage_taken": 0,
+      "poi_type": "mob",
+      "timestamp": 1780066147.6309955
+    }
+  ],
+  "last_updated": 1780066147.630997
+}

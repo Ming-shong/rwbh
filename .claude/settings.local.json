@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s http://localhost:5000/api/world)",
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "Bash(curl -s \"http://localhost:5000/api/scan?lat=24.79759&lng=120.99554&radius=500\")",
+      "Bash(python3 -c ' *)",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('total:', d['total']\\); p=d['pois'][0] if d['pois'] else {}; print\\('sample:', p.get\\('name'\\), 'walk_minutes:', p.get\\('walk_minutes'\\), 'patterns:', len\\(p.get\\('patterns',[]\\)\\)\\)\")",
+      "PowerShell(Stop-Process -Force -ErrorAction SilentlyContinue)",
+      "Bash(curl -s http://localhost:5000/api/shop)",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('ok:', d['ok']\\); [print\\(w['id'], w['price'], w['pattern']\\) for w in d['weapons']]\")",
+      "Bash(curl -s http://localhost:5000/api/stats)",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(d\\)\")",
+      "Bash(python -c \"import json,sys; print\\(json.load\\(sys.stdin\\)\\)\")",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('wins:', d['total_wins'], 'crystals:', d['total_crystals'], 'anomaly:', d['anomaly_level']\\)\")",
+      "Bash(python -c ' *)",
+      "Bash(powershell -Command \"Get-Item 'C:\\\\Users\\\\PKS\\\\Desktop\\\\final_project\\\\rwbh\\\\data\\\\cache.json' | Select-Object Length; \\(Get-Content 'C:\\\\Users\\\\PKS\\\\Desktop\\\\final_project\\\\rwbh\\\\data\\\\cache.json' -TotalCount 50\\) | ConvertFrom-Json -ErrorAction SilentlyContinue | ConvertTo-Json -Depth 2\")",
+      "Bash(curl -s \"http://localhost:5000/api/export/folium\")",
+      "Bash(python -c \"import sys; content=sys.stdin.read\\(\\); print\\('HTML size:', len\\(content\\), 'bytes'\\); print\\('Has folium map:', 'leaflet' in content.lower\\(\\)\\)\")",
+      "Bash(curl -s http://localhost:5000/)",
+      "Bash(python -c \"import sys; c=sys.stdin.read\\(\\); print\\('Panel system OK:', 'PANEL_MGR' in c\\); print\\('Collapse CSS OK:', 'panel-collapsed' in c\\); print\\('Resize handle OK:', 'resize-handle' in c\\); print\\('Manager modal OK:', 'panel-manager-overlay' in c\\)\")",
+      "Bash(curl -s http://localhost:5000/api/layout)",
+      "Bash(python -c \"import json,sys;d=json.load\\(sys.stdin\\);print\\('layout ok:',d.get\\('ok'\\)\\)\")",
+      "Bash(python -c \"import sys; c=sys.stdin.read\\(\\); print\\('Server OK, HTML size:', len\\(c\\)\\)\")",
+      "Bash(git --version)",
+      "Bash(git config *)"
+    ]
+  }
+}
