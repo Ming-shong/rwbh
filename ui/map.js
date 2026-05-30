@@ -253,7 +253,7 @@ function _setRoutePolyline(poiId, geometry) {
   if (!geometry) { delete routePolylineMap[poiId]; return; }
   const coords = geometry.coordinates.map(([lng, lat]) => [lat, lng]);
   routePolylineMap[poiId] = L.polyline(coords, {
-    color: "rgba(255,170,0,.55)", weight: 2, dashArray: "6,4",
+    color: "rgba(30,144,255,.75)", weight: 3, dashArray: "6,4",
   }).addTo(map);
 }
 
@@ -293,6 +293,18 @@ map.on('popupopen', async e => {
   // 用當前玩家位置刷新 popup 內容
   marker.setPopupContent(buildPopupHTML(poi));
 
+  // 將 popup 推到路線的對面，避免遮住路線（同時隱藏錯位的 tip）
+  if (STATE.player.lng != null) {
+    const offsetX = STATE.player.lng < poi.lng ? 155 : -155;
+    e.popup.options.offset = L.point(offsetX, -10);
+    e.popup.update();
+    // 直接隱藏 DOM 中的 tip（等 DOM 更新後再操作）
+    requestAnimationFrame(() => {
+      const tipEl = e.popup.getElement()?.querySelector('.leaflet-popup-tip-container');
+      if (tipEl) tipEl.style.display = 'none';
+    });
+  }
+
   // 抓取並繪製路線（Boss 和小怪都畫，已擊敗的跳過）
   if (!poi.defeated && STATE.player.lat && STATE.player.lng) {
     try {
@@ -308,11 +320,17 @@ map.on('popupopen', async e => {
   }
 });
 
-map.on('popupclose', () => {
+map.on('popupclose', e => {
   // 移除目前顯示的路線
   if (_openPopupPoi && routePolylineMap[_openPopupPoi.id]) {
     map.removeLayer(routePolylineMap[_openPopupPoi.id]);
     delete routePolylineMap[_openPopupPoi.id];
+  }
+  // 重置 tip 與 offset，下次開啟重新計算
+  if (e.popup) {
+    e.popup.options.offset = L.point(0, -10);
+    const tipEl = e.popup.getElement()?.querySelector('.leaflet-popup-tip-container');
+    if (tipEl) tipEl.style.display = '';
   }
   _openPopupMarker = null;
   _openPopupPoi    = null;

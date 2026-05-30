@@ -1,37 +1,17 @@
 /**
  * ui/inventory.js
  * 武器背包：管理擁有的武器 + 3 個武器槽。
- * 武器清單與裝備槽持久化至 localStorage，重啟後保留。
+ * 武器清單與裝備槽持久化至 sessionStorage，重整後清除。
  */
 window.INVENTORY = (() => {
   // 預設值
   let owned = ['pulse_gun'];
   let slots = ['pulse_gun', null, null];
 
-  // ── localStorage 持久化 ─────────────────────────────────────────────────────
+  // ── sessionStorage 持久化 ─────────────────────────────────────────────────────
 
-  function _save() {
-    localStorage.setItem('rwbh_inventory', JSON.stringify({ owned, slots }));
-  }
-
-  function _load() {
-    try {
-      const saved = JSON.parse(localStorage.getItem('rwbh_inventory') || 'null');
-      if (!saved) return;
-      // 確保 pulse_gun 永遠存在
-      if (saved.owned && Array.isArray(saved.owned)) {
-        owned = saved.owned;
-        if (!owned.includes('pulse_gun')) owned.unshift('pulse_gun');
-      }
-      if (saved.slots && Array.isArray(saved.slots)) {
-        slots = saved.slots;
-        if (!slots[0]) slots[0] = 'pulse_gun';
-      }
-    } catch (_) { /* 損壞的資料，使用預設值 */ }
-  }
-
-  // 啟動時立即載入
-  _load();
+  function _save() { /* 純記憶體，重整即歸零 */ }
+  function _load() { /* 無需載入 */ }
 
   // ── 資料 API ────────────────────────────────────────────────────────────────
 

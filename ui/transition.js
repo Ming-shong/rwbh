@@ -67,13 +67,14 @@ window.TRANSITION = (() => {
       STATE.markDefeated(result.poi_id);
     }
 
-    // 寫入後端 world.json
+    // 寫入記憶體統計（重整即歸零）
     if (result?.poi_id) {
-      fetch('/api/battle/end', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(result),
-      }).catch(() => {});
+      window._SESSION_STATS = window._SESSION_STATS || { battles:0, wins:0, crystals:0, defeated:0 };
+      window._SESSION_STATS.battles++;
+      if (result.won) { window._SESSION_STATS.wins++; window._SESSION_STATS.defeated++; }
+      window._SESSION_STATS.crystals += result.crystals || 0;
+      window.updateStatsBar?.();
+      window.dispatchEvent(new Event('rwbh_stats_updated'));
     }
   }
 

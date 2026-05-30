@@ -2,7 +2,7 @@
  * ui/state.js
  * -----------
  * 前端全域狀態管理。
- * 變異結晶、HP 持久化至 localStorage，重啟後保留。
+ * 變異結晶、HP 持久化至 sessionStorage，重整後清除。
  */
 
 window.STATE = {
@@ -12,7 +12,7 @@ window.STATE = {
     lng:      null,
     hp:       100,
     maxHp:    100,
-    crystals: parseInt(localStorage.getItem('rwbh_crystals') || '0', 10),
+    crystals: 0,
   },
 
   // 世界
@@ -47,7 +47,7 @@ window.STATE = {
   /** 增加/扣除變異結晶，並自動持久化 */
   addCrystals(n) {
     this.player.crystals = Math.max(0, this.player.crystals + n);
-    localStorage.setItem('rwbh_crystals', this.player.crystals);
+    // 純記憶體，重整即歸零
     document.dispatchEvent(new CustomEvent("crystalsChanged", {
       detail: { crystals: this.player.crystals },
     }));

@@ -79,11 +79,6 @@ def api_scan():
     pois   = search_pois(lat, lng, radius)
     events = generate_events(pois, lat, lng)
 
-    world        = world_load()
-    defeated_set = set(world.get("defeated", []))
-    for ev in events:
-        ev["defeated"] = ev["id"] in defeated_set
-
     mobs   = [e for e in events if e["type"] == "mob"]
     bosses = [e for e in events if e["type"] == "boss"]
 
