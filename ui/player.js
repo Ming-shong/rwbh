@@ -7,16 +7,21 @@ window.PLAYER_OBJ = (() => {
   const INV_FRAMES   = 90;
   const PLAYER_RADIUS = 8;
 
-  let x, y, hp, invFrames, shootTimer, mouseX, mouseY;
+  let x, y, hp, invFrames, shootTimer, subShootTimer, mouseX, mouseY;
   let alive = false;
   let particles = [];
   let prevPhase = 1;
+  let effectiveMaxHp = MAX_HP;
 
   function init(cx, cy) {
     x = cx; y = cy;
-    hp = (typeof STATE !== 'undefined' && STATE.player.hp > 0) ? STATE.player.hp : MAX_HP;
+    const bonus = window.RELICS?.getBonus?.() || {};
+    effectiveMaxHp = MAX_HP + (bonus.max_hp_bonus || 0);
+    hp = (typeof STATE !== 'undefined' && STATE.player.hp > 0)
+      ? Math.min(STATE.player.hp, effectiveMaxHp) : effectiveMaxHp;
     invFrames = 0;
     shootTimer = 0;
+    subShootTimer = 0;
     mouseX = cx;
     mouseY = cy;
     alive = true;
@@ -37,14 +42,28 @@ window.PLAYER_OBJ = (() => {
 
     if (invFrames > 0) invFrames--;
 
-    // 武器決定射擊間隔
-    const weapon   = INVENTORY.getActiveWeapon();
-    const interval = weapon.fire_rate || 7;
+    // 奇物射速加成
+    const relicBonus = window.RELICS?.getBonus?.() || {};
+    const fireRateMult = relicBonus.fire_rate_mult || 1;
 
+    // 主武器
+    const weapon   = INVENTORY.getActiveWeapon();
+    const interval = Math.max(1, Math.round((weapon.fire_rate || 7) * fireRateMult));
     shootTimer++;
     if (shootTimer >= interval) {
       shootTimer = 0;
       _shoot(weapon);
+    }
+
+    // 副武器
+    const subWeapon = INVENTORY.getSubWeapon?.();
+    if (subWeapon) {
+      const subInterval = Math.max(1, Math.round((subWeapon.fire_rate || 12) * fireRateMult));
+      subShootTimer++;
+      if (subShootTimer >= subInterval) {
+        subShootTimer = 0;
+        _shootSub(subWeapon);
+      }
     }
 
     // 尾焰粒子
@@ -61,42 +80,64 @@ window.PLAYER_OBJ = (() => {
 
   }
 
-  function _shoot(weapon) {
-    const color   = weapon.color   || '#00f0ff';
-    const damage  = window.CHEAT ? 99999 : (weapon.damage || 12);
-    const pattern = weapon.pattern || 'single';
+  // 計算副武器衛星位置（angle=0上/90右/180下/-90左）
+  function _subPos(pos) {
+    const sp = pos || { type: 'angle', angle: 90, dist: 25 };
+    const dist = sp.dist || 25;
+    if (sp.type === 'both_sides') {
+      const rad = Math.PI / 2; // 90 degrees
+      return [
+        { sx: x - dist, sy: y },
+        { sx: x + dist, sy: y },
+      ];
+    }
+    const rad = ((sp.angle || 0) * Math.PI) / 180;
+    return [{ sx: x + Math.sin(rad) * dist, sy: y - Math.cos(rad) * dist }];
+  }
 
+  function _shootSub(weapon) {
+    const color   = weapon.color   || '#88ddff';
+    const bonus   = window.RELICS?.getBonus?.() || {};
+    const damage  = window.CHEAT ? 99999 : Math.round((weapon.damage || 8) * (bonus.atk_mult || 1));
+    const pattern = weapon.pattern || 'single';
+    const positions = _subPos(weapon.sub_position);
+
+    positions.forEach(({ sx, sy }) => {
+      _spawnPattern(pattern, sx, sy, color, damage);
+    });
+  }
+
+  function _spawnPattern(pattern, ox, oy, color, damage) {
     switch (pattern) {
       case 'single':
-        BULLETS.spawn({ x, y: y - 12, vx: 0, vy: -11, r: 3, damage, team: 'player', color, maxLife: 100 });
-        SFX?.shoot?.();
+        BULLETS.spawn({ x: ox, y: oy - 10, vx: 0, vy: -11, r: 3, damage, team: 'player', color, maxLife: 100 });
         break;
-
       case 'twin':
-        BULLETS.spawn({ x: x - 12, y: y - 8, vx: -0.3, vy: -11, r: 3, damage, team: 'player', color, maxLife: 110 });
-        BULLETS.spawn({ x: x + 12, y: y - 8, vx:  0.3, vy: -11, r: 3, damage, team: 'player', color, maxLife: 110 });
-        SFX?.shoot?.();
+        BULLETS.spawn({ x: ox - 8, y: oy - 6, vx: -0.3, vy: -11, r: 3, damage, team: 'player', color, maxLife: 110 });
+        BULLETS.spawn({ x: ox + 8, y: oy - 6, vx:  0.3, vy: -11, r: 3, damage, team: 'player', color, maxLife: 110 });
         break;
-
       case 'spread_5': {
         const angles = [-0.35, -0.17, 0, 0.17, 0.35];
-        angles.forEach(a => {
-          BULLETS.spawn({ x, y: y - 10, vx: Math.sin(a) * 10, vy: -Math.cos(a) * 10, r: 2.5, damage, team: 'player', color, maxLife: 80 });
-        });
-        SFX?.shoot?.();
+        angles.forEach(a => BULLETS.spawn({ x: ox, y: oy - 8, vx: Math.sin(a)*10, vy: -Math.cos(a)*10, r: 2.5, damage, team: 'player', color, maxLife: 80 }));
         break;
       }
-
       case 'rapid':
-        BULLETS.spawn({ x: x + (Math.random() - 0.5) * 6, y: y - 10, vx: (Math.random() - 0.5) * 0.8, vy: -13, r: 2, damage, team: 'player', color, maxLife: 90 });
-        SFX?.shoot?.();
+        BULLETS.spawn({ x: ox+(Math.random()-0.5)*4, y: oy-8, vx:(Math.random()-0.5)*0.5, vy:-13, r:2, damage, team:'player', color, maxLife:90 });
         break;
-
       case 'seek':
-        BULLETS.spawn({ x, y: y - 12, vx: 0, vy: -8, r: 4, damage, team: 'player', color, maxLife: 180, seeking: true, seekStrength: 0.35 });
-        SFX?.shootSeek?.();
+        BULLETS.spawn({ x: ox, y: oy-10, vx:0, vy:-8, r:4, damage, team:'player', color, maxLife:180, seeking:true, seekStrength:0.35 });
         break;
     }
+  }
+
+  function _shoot(weapon) {
+    const color   = weapon.color   || '#00f0ff';
+    const bonus   = window.RELICS?.getBonus?.() || {};
+    const damage  = window.CHEAT ? 99999 : Math.round((weapon.damage || 12) * (bonus.atk_mult || 1));
+    const pattern = weapon.pattern || 'single';
+
+    _spawnPattern(pattern, x, y - 2, color, damage);
+    pattern === 'seek' ? SFX?.shootSeek?.() : SFX?.shoot?.();
   }
 
   function takeDamage(dmg) {
@@ -106,10 +147,32 @@ window.PLAYER_OBJ = (() => {
     invFrames = INV_FRAMES;
     if (hp <= 0) { hp = 0; alive = false; }
     window.STATE?.setHp?.(hp);
+    window.addMutation?.(dmg / effectiveMaxHp * 100);
     return true;
   }
 
   function render(ctx) {
+    // 副武器衛星（純視覺，不計入碰撞）
+    const subWeapon = INVENTORY.getSubWeapon?.();
+    if (subWeapon) {
+      const positions = _subPos(subWeapon.sub_position);
+      positions.forEach(({ sx, sy }) => {
+        ctx.save();
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = subWeapon.color || '#88ddff';
+        ctx.fillStyle = subWeapon.color || '#88ddff';
+        ctx.globalAlpha = 0.85;
+        ctx.beginPath();
+        ctx.arc(sx, sy, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 0.3;
+        ctx.beginPath();
+        ctx.arc(sx, sy, 9, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      });
+    }
+
     // 尾焰粒子（讀取自訂顏色）
     const _pv = window._CUSTOM_VISUALS?.player || {};
     const _hotColor  = _pv.thruster_hot_color  || '#00f0ff';

@@ -357,15 +357,22 @@ function onBattle(poiId) {
     return;
   }
 
+  const dist = _haversine(STATE.player.lat, STATE.player.lng, poi.lat, poi.lng);
+
   if (poi.type === 'boss') {
     const threat      = poi.effective_threat || poi.threat;
     const battleRange = 50 + threat * 25;
-    const dist = _haversine(STATE.player.lat, STATE.player.lng, poi.lat, poi.lng);
     if (dist > battleRange) {
       window.HUD?.toast(
         `距離太遠！需進入紅色圓圈（${battleRange}m），目前 ${Math.round(dist)}m`,
         3200
       );
+      return;
+    }
+  } else if (window.GPS_ACTIVE) {
+    const PULSE_R = 60; // 藍圈半徑（與 playerPulse radius 一致）
+    if (dist > PULSE_R) {
+      window.HUD?.toast(`需在藍色範圍內（${PULSE_R}m），目前 ${Math.round(dist)}m`, 2800);
       return;
     }
   }

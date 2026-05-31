@@ -200,7 +200,11 @@ window.BATTLE = (() => {
       poiData._speedBonus  = sMult > 1.2;
       poiData._noDmgBonus  = damageTaken === 0;
 
-      const resultData = { poi_id: poiData.id, won: true, crystals, damage_taken: damageTaken, type: poiData.type, threat, speed_bonus: poiData._speedBonus, no_damage_bonus: poiData._noDmgBonus };
+      // Boss 戰有機率掉落奇物
+      const relicDrop = (poiData.type === 'boss')
+        ? (window.RELICS?.rollDrop?.(threat) || null) : null;
+
+      const resultData = { poi_id: poiData.id, won: true, crystals, damage_taken: damageTaken, type: poiData.type, threat, speed_bonus: poiData._speedBonus, no_damage_bonus: poiData._noDmgBonus, relic_drop: relicDrop };
       _showExitBtn(() => { clearTimeout(_resultTimer); TRANSITION.toMap(resultData); });
       _resultTimer = setTimeout(() => TRANSITION.toMap(resultData), 3000);
 

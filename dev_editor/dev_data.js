@@ -81,7 +81,7 @@ window.DEV_DEFAULT_LORE = {
 };
 
 window.DEV_DEFAULT_MECHANICS = {
-  player:{ max_hp:100, inv_frames:90, player_radius:8, move_smoothing:0.14 },
+  player:{ max_hp:100, inv_frames:90, player_radius:8, move_smoothing:0.14, base_atk:12, fire_rate:7, bullet_speed_mult:1.0, damage_reduction:0, start_crystals:0 },
   skills:{ dash:{enabled:false,distance:120,inv_frames:20,cooldown_s:1.5}, shield:{enabled:false,radius:40,max_frames:60,cost_crystals:5,deflect:true}, bomb:{enabled:false,cooldown_s:8,cost_crystals:20} },
   aim_assist_deg:0, combo:{enabled:false,threshold:10,multiplier:1.5},
 };

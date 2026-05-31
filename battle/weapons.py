@@ -11,6 +11,7 @@ from pathlib import Path
 CUSTOM_FILE = Path(__file__).parent.parent / "data" / "custom_weapons.json"
 
 WEAPONS: dict[str, dict] = {
+    # ── 主武器 ────────────────────────────────────────────────────
     "pulse_gun": {
         "name":        "脈衝槍",
         "description": "標準單發，射速穩定。入門武器。",
@@ -20,6 +21,7 @@ WEAPONS: dict[str, dict] = {
         "color":       "#00f0ff",
         "price":       0,
         "icon":        "▷",
+        "type":        "main",
     },
     "twin": {
         "name":        "雙管炮",
@@ -30,6 +32,7 @@ WEAPONS: dict[str, dict] = {
         "color":       "#00d4ff",
         "price":       80,
         "icon":        "◈",
+        "type":        "main",
     },
     "scatter": {
         "name":        "散彈槍",
@@ -40,6 +43,7 @@ WEAPONS: dict[str, dict] = {
         "color":       "#ffaa00",
         "price":       120,
         "icon":        "⋯",
+        "type":        "main",
     },
     "rapid": {
         "name":        "速射機槍",
@@ -50,6 +54,7 @@ WEAPONS: dict[str, dict] = {
         "color":       "#00ff88",
         "price":       150,
         "icon":        "≡",
+        "type":        "main",
     },
     "seeker": {
         "name":        "追蹤導彈",
@@ -60,6 +65,32 @@ WEAPONS: dict[str, dict] = {
         "color":       "#ff6b35",
         "price":       300,
         "icon":        "◎",
+        "type":        "main",
+    },
+    # ── 副武器 ────────────────────────────────────────────────────
+    "side_cannons": {
+        "name":        "側翼砲台",
+        "description": "裝備在左右兩側，自動向前方補充火力。",
+        "damage":      8,
+        "fire_rate":   12,
+        "pattern":     "single",
+        "color":       "#88ddff",
+        "price":       100,
+        "icon":        "⊲",
+        "type":        "sub",
+        "sub_position": {"type": "both_sides", "dist": 28},
+    },
+    "rear_turret": {
+        "name":        "後方砲台",
+        "description": "裝備在後方，自動向後方掃射覆蓋盲區。",
+        "damage":      10,
+        "fire_rate":   18,
+        "pattern":     "spread_5",
+        "color":       "#ff8855",
+        "price":       180,
+        "icon":        "▽",
+        "type":        "sub",
+        "sub_position": {"type": "angle", "angle": 180, "dist": 20},
     },
 }
 

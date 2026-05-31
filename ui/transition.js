@@ -82,6 +82,16 @@ window.TRANSITION = (() => {
       window.updateStatsBar?.();
       window.dispatchEvent(new Event('rwbh_stats_updated'));
     }
+
+    // 奇物掉落通知
+    if (result?.relic_drop) {
+      setTimeout(() => window.showRelicDrop?.(result.relic_drop), 400);
+    }
+
+    // 變異達 100% 時顯示警告
+    if ((window.MUTATION || 0) >= 100) {
+      setTimeout(() => window.showMutationWarning?.(), 800);
+    }
   }
 
   return { toBattle, toMap };

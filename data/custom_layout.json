@@ -1,0 +1,18 @@
+{
+  "scan-panel": {
+    "top": 185,
+    "left": 16,
+    "right": null,
+    "width": 260,
+    "visible": true,
+    "collapsed": false
+  },
+  "dest-panel": {
+    "top": 82,
+    "left": null,
+    "right": 16,
+    "width": 270,
+    "visible": true,
+    "collapsed": false
+  }
+}

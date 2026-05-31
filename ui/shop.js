@@ -7,6 +7,8 @@
 window.ITEMS = {
   heal_potion:    0,  // 回血藥劑
   revive_syringe: 0,  // 復活針劑
+  miracle_potion:  0, // 奇蹟藥劑（融合奇物取得）
+  miracle_essence: 0, // 奇蹟精華（研磨奇物取得）
 
   add(id, n = 1) { this[id] = (this[id] || 0) + n; },
   use(id) {
@@ -43,13 +45,37 @@ const ITEM_DEFS = [
       return true;
     },
   },
+  {
+    id: 'miracle_potion',
+    name: '奇蹟藥劑', icon: '🧪', color: '#ffcc00',
+    desc: '變異達 100% 時使用，可清除全部變異。融合 3 個奇物取得。',
+    purchasable: false,
+    use() {
+      window.resetMutation?.();
+      window.HUD?.toast('🧪 奇蹟藥劑生效，變異清除', 2500);
+      return true;
+    },
+  },
+  {
+    id: 'miracle_essence',
+    name: '奇蹟精華', icon: '✦', color: '#88ffcc',
+    desc: '每個可減少 1% 變異。研磨奇物取得（10～30 個）。',
+    purchasable: false,
+    use() {
+      if ((window.MUTATION || 0) <= 0) { window.HUD?.toast('變異已為 0%'); return false; }
+      window.MUTATION = Math.max(0, (window.MUTATION || 0) - 1);
+      window.HUD?.setMutation?.(window.MUTATION);
+      window.HUD?.toast('✦ 奇蹟精華：變異 -1%', 1500);
+      return true;
+    },
+  },
 ];
 
 window.ITEM_DEFS_MAP = Object.fromEntries(ITEM_DEFS.map(d => [d.id, d]));
 
 window.SHOP = (() => {
   let weapons = [];
-  let _currentTab = 'weapon';
+  let _currentTab = 'weapon_main';
 
   async function openModal() {
     document.getElementById('shop-modal').style.display = 'flex';
@@ -66,8 +92,9 @@ window.SHOP = (() => {
     document.querySelectorAll('.shop-tab-btn').forEach(b => {
       b.classList.toggle('active', b.dataset.tab === tab);
     });
-    document.getElementById('shop-weapon-panel').style.display = tab === 'weapon' ? '' : 'none';
-    document.getElementById('shop-item-panel').style.display   = tab === 'item'   ? '' : 'none';
+    document.getElementById('shop-weapon-main-panel').style.display = tab === 'weapon_main' ? '' : 'none';
+    document.getElementById('shop-weapon-sub-panel').style.display  = tab === 'weapon_sub'  ? '' : 'none';
+    document.getElementById('shop-item-panel').style.display        = tab === 'item'        ? '' : 'none';
   }
 
   async function _loadWeapons() {
@@ -89,7 +116,8 @@ window.SHOP = (() => {
     if (STATE.player.crystals < w.price) { window.HUD?.toast('◈ 結晶不足'); return; }
     STATE.addCrystals(-w.price);
     INVENTORY.own(weaponId);
-    INVENTORY.equip(weaponId, 0);
+    const slot = (w.type === 'sub') ? 1 : 0;
+    INVENTORY.equip(weaponId, slot);
     SFX.buyItem?.();
     window.HUD?.toast(`✦ 購得 ${w.name}！已裝備`, 2500);
     _renderWeapons();
@@ -114,18 +142,26 @@ window.SHOP = (() => {
   }
 
   function _renderAll() {
-    _renderWeapons();
+    _renderWeapons('main');
+    _renderWeapons('sub');
     _renderItems();
   }
 
-  function _renderWeapons() {
-    const el = document.getElementById('shop-weapon-items');
+  function _renderWeapons(typeFilter) {
+    const elId = typeFilter === 'sub' ? 'shop-weapon-sub-items' : 'shop-weapon-main-items';
+    const el = document.getElementById(elId);
     if (!el) return;
     const crystals = STATE.player.crystals;
-    el.innerHTML = weapons.map(w => {
-      const owned = INVENTORY.isOwned(w.id);
-      const equipped = INVENTORY.getEquipped(0) === w.id;
-      const canBuy = !owned && crystals >= w.price;
+    const list = weapons.filter(w => (w.type || 'main') === typeFilter);
+    if (!list.length) {
+      el.innerHTML = '<div style="color:var(--muted);text-align:center;padding:20px;font-size:10px">尚無此類武器</div>';
+      return;
+    }
+    const slot = typeFilter === 'sub' ? 1 : 0;
+    el.innerHTML = list.map(w => {
+      const owned   = INVENTORY.isOwned(w.id);
+      const equipped = INVENTORY.getEquipped(slot) === w.id;
+      const canBuy  = !owned && crystals >= w.price;
       return `<div class="shop-card ${owned?'owned':''} ${equipped?'equipped':''}">
         <div class="shop-card-header">
           <span class="shop-icon" style="color:${w.color}">${w.icon}</span>
@@ -134,12 +170,12 @@ window.SHOP = (() => {
         <div class="shop-stats">
           <span>ATK <b>${w.damage}</b></span>
           <span>INT <b>${w.fire_rate}f</b></span>
-          <span>類型 <b>${_patternLabel(w.pattern)}</b></span>
+          <span>模式 <b>${_patternLabel(w.pattern)}</b></span>
         </div>
         <div class="shop-footer">
           ${owned ? `<div class="shop-tag-owned">${equipped?'✓ 裝備中':'✓ 已擁有'}</div>`
                   : `<div class="shop-price ${canBuy?'':'unaffordable'}">◈ ×${w.price}</div>`}
-          ${owned ? (equipped ? '' : `<button class="shop-btn equip-btn" onclick="INVENTORY.equip('${w.id}',0);SHOP.refresh()">裝備</button>`)
+          ${owned ? (equipped ? '' : `<button class="shop-btn equip-btn" onclick="INVENTORY.equip('${w.id}',${slot});SHOP.refresh()">裝備</button>`)
                   : `<button class="shop-btn buy-btn" ${canBuy?'':'disabled'} onclick="SHOP.buy('${w.id}')">購買</button>`}
         </div>
       </div>`;
@@ -150,7 +186,7 @@ window.SHOP = (() => {
     const el = document.getElementById('shop-item-list');
     if (!el) return;
     const crystals = STATE.player.crystals;
-    el.innerHTML = ITEM_DEFS.map(def => {
+    el.innerHTML = ITEM_DEFS.filter(def => def.purchasable !== false).map(def => {
       const owned = ITEMS.count(def.id);
       const canBuy = crystals >= def.price;
       // revive_syringe 不顯示使用按鈕；heal_potion 只有 HP > 0 且未滿才能用

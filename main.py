@@ -252,6 +252,7 @@ def api_dev_import():
         "world":     "custom_world.json",
         "lore":      "custom_lore.json",
         "ui_layout": "custom_layout.json",
+        "relics":    "custom_relics.json",
     }
     for key, filename in mapping.items():
         if key in data:
@@ -266,10 +267,19 @@ def api_dev_import():
 
 # ── 前端靜態頁面 ──────────────────────────────────────────────────────────────
 
+DEV_DIR  = Path(__file__).parent / "dev_editor"
+
 @app.get("/")
 def index():
     return send_from_directory(UI_DIR, "index.html")
 
+@app.get("/dev")
+def dev_editor_index():
+    return send_from_directory(DEV_DIR, "index.html")
+
+@app.get("/dev/<path:filename>")
+def dev_editor_static(filename):
+    return send_from_directory(DEV_DIR, filename)
 
 @app.get("/<path:filename>")
 def static_files(filename):

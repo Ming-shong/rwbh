@@ -6,9 +6,16 @@
 
 這份檔案記錄所有主要檔案的關鍵函式行號，修改前先查此表再用 `offset/limit` 精確 Read，避免重複讀取整個大檔案。
 
+## 查找變數前（全域 & 區域）
+
+**必須先讀取** `C:\Users\PKS\.claude\projects\C--Users-PKS-Desktop-final-project-rwbh\memory\variables.md`
+
+確認變數位置後再動作，不必另外 Grep。
+
 ## 每次修改程式後
 
 若新增、刪除、移動了函式，**必須同步更新** `project_file_map.md` 中對應的行號。
+若新增、修改、刪除了全域或區域變數，**必須同步更新** `variables.md`。
 只需更新有變動的那幾行，不必重新讀整個檔案。
 
 ## Token 節省原則

@@ -123,7 +123,8 @@ html,body{width:100%;height:100%;background:var(--bg);color:var(--text);font-fam
   <h1>⚙ RWBH DEV EDITOR</h1>
   <div class="hdr-sep"></div>
   <button class="hdr-btn hdr-btn-load"  onclick="APP.loadFromFile()">📂 載入設計</button>
-  <button class="hdr-btn hdr-btn-save"  onclick="APP.saveToFile()">📥 儲存設計</button>
+  <button class="hdr-btn hdr-btn-save"  onclick="APP.saveLocal()">💾 儲存</button>
+  <button class="hdr-btn hdr-btn-save"  onclick="APP.downloadDesign()" style="background:rgba(0,240,255,.06)">📥 匯出</button>
   <div class="hdr-sep"></div>
   <button class="hdr-btn hdr-btn-apply" id="btn-apply-server" onclick="APP.applyToServer()">🚀 上傳到伺服器</button>
   <span id="hdr-status">選擇左側地點開始設計</span>
@@ -140,11 +141,9 @@ html,body{width:100%;height:100%;background:var(--bg);color:var(--text);font-fam
 <!-- ── 中央編輯器 ── -->
 <div id="editor">
   <div id="tab-bar">
-    <button class="tab-btn active" onclick="APP.switchTab('pattern',this)">彈幕 Pattern</button>
-    <button class="tab-btn" onclick="APP.switchTab('visual',this)">外觀設計</button>
+    <button class="tab-btn active" onclick="APP.switchTab('enemy_data',this)">敵人數據</button>
     <button class="tab-btn" onclick="APP.switchTab('weapon',this)">武器管理</button>
-    <button class="tab-btn" onclick="APP.switchTab('mechanics',this)">玩家機制</button>
-    <button class="tab-btn" onclick="APP.switchTab('abilities',this)">敵人能力</button>
+    <button class="tab-btn" onclick="APP.switchTab('player_data',this)">玩家數據</button>
     <button class="tab-btn" onclick="APP.switchTab('balance',this)">遊戲平衡</button>
     <button class="tab-btn" onclick="APP.switchTab('world',this)">地圖規則</button>
     <button class="tab-btn" onclick="APP.switchTab('lore',this)">故事文案</button>
@@ -153,6 +152,7 @@ html,body{width:100%;height:100%;background:var(--bg);color:var(--text);font-fam
     <button class="tab-btn" onclick="APP.switchTab('theme',this)">HUD 主題</button>
     <button class="tab-btn" onclick="APP.switchTab('apply',this)">套用選擇</button>
     <button class="tab-btn" onclick="APP.switchTab('ui_panels',this)">UI 面板</button>
+    <button class="tab-btn" onclick="APP.switchTab('relic',this)">奇物設計</button>
   </div>
   <div id="tab-content">
     <div style="color:var(--muted);text-align:center;margin-top:40px;font-size:11px">← 請先在左側選擇一個範例地點</div>
@@ -163,6 +163,7 @@ html,body{width:100%;height:100%;background:var(--bg);color:var(--text);font-fam
 <div id="preview-panel">
   <div id="preview-title">
     <span>戰鬥預覽</span>
+    <span style="font-size:8px;color:var(--muted);letter-spacing:0">按住滑鼠射擊 ｜ 彈幕Tab拖移箭頭調角度</span>
     <button class="ed-btn ed-btn-accent" style="font-size:8px;padding:4px 8px" onclick="PREVIEW.toggle()">▶ 開始</button>
   </div>
   <canvas id="preview-canvas"></canvas>
@@ -193,17 +194,29 @@ const DESIGN = {
   balance:   JSON.parse(JSON.stringify(DEV_DEFAULT_BALANCE)),
   world:     JSON.parse(JSON.stringify(DEV_DEFAULT_WORLD)),
   lore:      JSON.parse(JSON.stringify(DEV_DEFAULT_LORE)),
+  mob_counts: {1:3,2:4,3:3,4:4,5:5},
+  custom_pois: [],
   sfx:{}, vfx:{},
   theme:{ vars:{'--accent':'#00f0ff','--boss':'#ff1a6e','--mob':'#ff6b35','--warning':'#ffaa00','--green':'#00ff88','--danger':'#ff3a3a','--bg':'#050810','--panel':'#0a0f1e','--text':'#c8deff','--muted':'#4a6080'}},
+  relics: {
+    iron_core:     { name:'鐵核',     icon:'⬡', color:'#aaaaaa', bonus:{ atk_mult:1.25, max_hp_bonus:0,  fire_rate_mult:1    }, drop_threat_min:3, drop_rate:0.40 },
+    crimson_shard: { name:'赤晶碎片', icon:'◈', color:'#ff4444', bonus:{ atk_mult:1.50, max_hp_bonus:0,  fire_rate_mult:0.90 }, drop_threat_min:4, drop_rate:0.25 },
+    vitality_core: { name:'活力核',   icon:'♥', color:'#00ff88', bonus:{ atk_mult:1,    max_hp_bonus:30, fire_rate_mult:1    }, drop_threat_min:2, drop_rate:0.50 },
+    rapid_crystal: { name:'速射結晶', icon:'⚡', color:'#ffee00', bonus:{ atk_mult:1,    max_hp_bonus:0,  fire_rate_mult:0.75 }, drop_threat_min:3, drop_rate:0.30 },
+    shadow_eye:    { name:'暗影之眼', icon:'◉', color:'#aa44ff', bonus:{ atk_mult:1.35, max_hp_bonus:10, fire_rate_mult:0.85 }, drop_threat_min:5, drop_rate:0.15 },
+  },
   server_assignments:{
     patterns:true, visuals:true, weapons:true, mechanics:false,
     abilities:false, balance:true, world:false, lore:false, sfx:false, vfx:false, theme:false,
+    relics:true,
   },
 };
 
 let currentPoi    = null;
-let currentTab    = 'pattern';
+let currentTab    = 'enemy_data';
 let currentThreat = 1;
+let currentEnemyType     = 'mob';
+let currentEnemyExpanded = null;
 
 // ═══════════════════════════════════════════════════════════════
 //  APP 控制器
@@ -229,6 +242,8 @@ const APP = {
 
     // 初始化預覽
     PREVIEW.init();
+    // 初始渲染
+    this.renderTab('enemy_data');
   },
 
   selectPoi(poi) {
@@ -253,11 +268,11 @@ const APP = {
     const poi = currentPoi;
 
     switch(tab) {
-      case 'pattern':   el.innerHTML = TABS.pattern(poi); break;
-      case 'visual':    el.innerHTML = TABS.visual(poi);  break;
       case 'weapon':    el.innerHTML = TABS.weapon();     break;
-      case 'mechanics': el.innerHTML = TABS.mechanics();  break;
-      case 'abilities': el.innerHTML = TABS.abilities(poi); break;
+      case 'mechanics':
+      case 'player_data':  el.innerHTML = TABS.player_data(); break;
+      case 'abilities':
+      case 'enemy_data':   el.innerHTML = TABS.enemy_data(); break;
       case 'balance':   el.innerHTML = TABS.balance();    break;
       case 'world':     el.innerHTML = TABS.world();      break;
       case 'lore':      el.innerHTML = TABS.lore();       break;
@@ -266,16 +281,26 @@ const APP = {
       case 'theme':     el.innerHTML = TABS.theme();      break;
       case 'apply':     el.innerHTML = TABS.apply();      break;
       case 'ui_panels': el.innerHTML = TABS.ui_panels();  break;
+      case 'relic':     el.innerHTML = TABS.relic();      break;
       default:          el.innerHTML = '<div>開發中...</div>';
     }
   },
 
-  saveToFile() {
+  saveToFile() { this.saveLocal(); },
+  saveLocal() {
     localStorage.setItem('rwbh_design', JSON.stringify(DESIGN));
+    this.status('✓ 已儲存到瀏覽器');
+  },
+  downloadDesign() {
     const blob = new Blob([JSON.stringify(DESIGN, null, 2)], {type:'application/json'});
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
     a.download = 'rwbh_design.json'; a.click();
-    this.status('✓ 設計已下載');
+    this.status('✓ 設計已匯出');
+  },
+  previewPoiById(id) {
+    const all=[...DEV_POIS,...(DESIGN.custom_pois||[])];
+    const poi=all.find(p=>p.id===id);
+    if(poi){ PREVIEW.loadPoi(poi); if(!PREVIEW.running) PREVIEW.start(); }
   },
 
   loadFromFile() {
@@ -325,14 +350,12 @@ const APP = {
 // ═══════════════════════════════════════════════════════════════
 const TABS = {
 
-  // ── 彈幕 Pattern ──────────────────────────────────────────────
+  // ── (pattern & visual merged into enemy_data — kept for JS validity, never called) ─
   pattern(poi) {
-    if (!poi) return '<div class="info-box">← 請先選擇左側的 Boss 或小怪地點</div>';
-    const key = `threat_${poi.threat}`;
+    const key = `threat_${poi?.threat||1}`;
     const phases = DESIGN.patterns[key] || [];
-    const movementType = DESIGN.visuals?.boss_movement?.[poi.threat]?.type || 'wobble';
+    const movementType = DESIGN.visuals?.boss_movement?.[poi?.threat]?.type || 'wobble';
     const MOVE_LABELS = {wobble:'正弦擺動',circular:'圓形軌道',figure8:'8字形',track_player_x:'跟隨X軸',static:'固定靜止'};
-
     return `
       <div class="section-title">⚡ 彈幕 Pattern — ${poi.name} (威脅 Lv.${poi.threat})</div>
       <div class="info-box">Phase 依 HP 閾值從高到低排列。Boss HP 低於閾值時啟動對應 Phase。</div>
@@ -398,12 +421,26 @@ const TABS = {
             <input type="range" class="form-input" min="60" max="600" step="20" value="${p.maxLife}" oninput="ED.setPhase('${key}',${i},'maxLife',+this.value);this.nextElementSibling.textContent=this.value">
             <span class="range-val">${p.maxLife}</span>
           </div>
-          <div class="form-row"><label class="form-label">彈道</label>
-            <select class="form-select" style="flex:none;width:120px" onchange="ED.setPhase('${key}',${i},'trajectory',this.value)">
-              ${['straight','parabola','curve','homing','bounce'].map(t=>`<option value="${t}" ${(p.trajectory||'straight')===t?'selected':''}>${{straight:'直線',parabola:'拋物線',curve:'弧線',homing:'追蹤',bounce:'反彈'}[t]}</option>`).join('')}
+          <div class="form-row"><label class="form-label">發射路線</label>
+            <select class="form-select" style="flex:none;width:100px" onchange="ED.setPhase('${key}',${i},'trajectory',this.value);APP.renderTab('pattern')">
+              ${['straight','curve'].map(t=>`<option value="${t}" ${(p.trajectory||'straight')===t?'selected':''}>${{straight:'直線',curve:'曲線'}[t]}</option>`).join('')}
             </select>
           </div>
-          ${p.trajectory==='parabola'?`<div class="form-row"><label class="form-label">重力</label><input type="range" class="form-input" min="0.01" max="0.5" step="0.01" value="${p.gravity||0.08}" oninput="ED.setPhase('${key}',${i},'gravity',+this.value);this.nextElementSibling.textContent=this.value"><span class="range-val">${p.gravity||0.08}</span></div>`:''}
+          ${(p.trajectory||'straight')==='curve'?`<div class="form-row"><label class="form-label">彎曲度</label><input type="range" class="form-input" min="-0.15" max="0.15" step="0.005" value="${p.curve_bend||0.03}" oninput="ED.setPhase('${key}',${i},'curve_bend',+this.value);this.nextElementSibling.textContent=(+this.value).toFixed(3)"><span class="range-val">${(p.curve_bend||0.03).toFixed(3)}</span></div>`:''}
+          <div class="form-row"><label class="form-label">發射來源</label>
+            <select class="form-select" style="flex:none;width:110px" onchange="ED.setPhase('${key}',${i},'launch_source',this.value);APP.renderTab('pattern')">
+              ${['monster','top','bottom','left','right','fixed'].map(s=>`<option value="${s}" ${(p.launch_source||'monster')===s?'selected':''}>${{monster:'怪物位置',top:'上方邊緣',bottom:'下方邊緣',left:'左方邊緣',right:'右方邊緣',fixed:'固定座標'}[s]}</option>`).join('')}
+            </select>
+          </div>
+          ${(p.launch_source||'monster')==='fixed'?`
+            <div class="form-row" style="padding-left:20px"><label class="form-label">固定 X</label><input type="range" class="form-input" min="0" max="400" value="${p.fixed_x||200}" oninput="ED.setPhase('${key}',${i},'fixed_x',+this.value);this.nextElementSibling.textContent=this.value"><span class="range-val">${p.fixed_x||200}</span></div>
+            <div class="form-row" style="padding-left:20px"><label class="form-label">固定 Y</label><input type="range" class="form-input" min="0" max="400" value="${p.fixed_y||80}" oninput="ED.setPhase('${key}',${i},'fixed_y',+this.value);this.nextElementSibling.textContent=this.value"><span class="range-val">${p.fixed_y||80}</span></div>
+          `:''}
+          <div class="form-row"><label class="form-label">發射角偏移</label>
+            <input type="range" class="form-input" min="-180" max="180" value="${p.dir_offset||0}" oninput="ED.setPhase('${key}',${i},'dir_offset',+this.value);this.nextElementSibling.textContent=this.value+'°'">
+            <span class="range-val">${p.dir_offset||0}°</span>
+            <span style="font-size:8px;color:var(--muted);margin-left:4px">（或在預覽中拖移箭頭）</span>
+          </div>
         </div>
         `;
       }).join('')}
@@ -452,6 +489,37 @@ const TABS = {
         <span class="range-val">${bv.size_multiplier||1.0}</span>
       </div>
 
+      <div class="section-title" style="font-size:9px;margin-top:10px">Boss 子形狀（疊加碰撞）</div>
+      ${(bv.sub_shapes||[]).map((ss,si)=>`
+        <div style="background:rgba(255,26,110,.06);border:1px solid rgba(255,26,110,.2);border-radius:4px;padding:8px;margin-bottom:6px">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+            <span style="font-size:9px;color:var(--boss)">子形狀 ${si+1}</span>
+            <button class="ed-btn ed-btn-danger" style="font-size:8px;padding:2px 6px" onclick="DESIGN.visuals.boss[${t}].sub_shapes.splice(${si},1);APP.renderTab('visual')">✕ 移除</button>
+          </div>
+          <div class="form-row"><label class="form-label" style="min-width:70px">形狀</label>
+            <select class="form-select" onchange="DESIGN.visuals.boss[${t}].sub_shapes[${si}].shape=this.value">
+              ${SHAPES_BOSS.map(s=>`<option value="${s}" ${ss.shape===s?'selected':''}>${SHAPE_LABELS[s]||s}</option>`).join('')}
+            </select></div>
+          <div class="form-row"><label class="form-label" style="min-width:70px">顏色</label>
+            <input type="color" class="form-input" value="${ss.color||'#ff1a6e'}" onchange="DESIGN.visuals.boss[${t}].sub_shapes[${si}].color=this.value"></div>
+          <div class="form-row"><label class="form-label" style="min-width:70px">大小倍率</label>
+            <input type="range" class="form-input" min="0.2" max="2.0" step="0.1" value="${ss.size_mult||0.6}" oninput="DESIGN.visuals.boss[${t}].sub_shapes[${si}].size_mult=+this.value;this.nextElementSibling.textContent=this.value">
+            <span class="range-val">${ss.size_mult||0.6}</span></div>
+          <div class="form-row"><label class="form-label" style="min-width:70px">X 位移</label>
+            <input type="range" class="form-input" min="-80" max="80" value="${ss.offset_x||0}" oninput="DESIGN.visuals.boss[${t}].sub_shapes[${si}].offset_x=+this.value;this.nextElementSibling.textContent=this.value+'px'">
+            <span class="range-val">${ss.offset_x||0}px</span></div>
+          <div class="form-row"><label class="form-label" style="min-width:70px">Y 位移</label>
+            <input type="range" class="form-input" min="-80" max="80" value="${ss.offset_y||0}" oninput="DESIGN.visuals.boss[${t}].sub_shapes[${si}].offset_y=+this.value;this.nextElementSibling.textContent=this.value+'px'">
+            <span class="range-val">${ss.offset_y||0}px</span></div>
+          <div class="form-row"><label class="form-label" style="min-width:70px">光暈強度</label>
+            <input type="range" class="form-input" min="0" max="80" value="${ss.glow_intensity||20}" oninput="DESIGN.visuals.boss[${t}].sub_shapes[${si}].glow_intensity=+this.value;this.nextElementSibling.textContent=this.value">
+            <span class="range-val">${ss.glow_intensity||20}</span></div>
+          <div class="form-row"><label class="form-label" style="min-width:70px">輻條數</label>
+            <input type="range" class="form-input" min="0" max="12" value="${ss.spoke_count||0}" oninput="DESIGN.visuals.boss[${t}].sub_shapes[${si}].spoke_count=+this.value;this.nextElementSibling.textContent=this.value">
+            <span class="range-val">${ss.spoke_count||0}</span></div>
+        </div>`).join('')}
+      <button class="ed-btn ed-btn-accent" style="font-size:8px;padding:3px 8px" onclick="if(!DESIGN.visuals.boss[${t}].sub_shapes)DESIGN.visuals.boss[${t}].sub_shapes=[];DESIGN.visuals.boss[${t}].sub_shapes.push({shape:'circle',color:'#ff1a6e',size_mult:0.5,offset_x:30,offset_y:0,glow_intensity:20,spoke_count:0});APP.renderTab('visual')">+ 新增子形狀</button>
+
       <hr style="border-color:var(--border);margin:14px 0">
       <div class="section-title" style="font-size:9px;color:var(--mob)">小怪外觀 — 威脅 Lv.${t}</div>
       <div class="form-row"><label class="form-label">形狀</label>
@@ -471,6 +539,34 @@ const TABS = {
         <span class="range-val">${mv.size_multiplier||1.0}</span>
       </div>
       <label class="form-check"><input type="checkbox" ${mv.show_hp_bar!==false?'checked':''} onchange="ED.setVisualMob(${t},'show_hp_bar',this.checked)">顯示血條</label>
+
+      <div class="section-title" style="font-size:9px;margin-top:10px">小怪子形狀（疊加碰撞）</div>
+      ${(mv.sub_shapes||[]).map((ss,si)=>`
+        <div style="background:rgba(255,107,53,.06);border:1px solid rgba(255,107,53,.2);border-radius:4px;padding:8px;margin-bottom:6px">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+            <span style="font-size:9px;color:var(--mob)">子形狀 ${si+1}</span>
+            <button class="ed-btn ed-btn-danger" style="font-size:8px;padding:2px 6px" onclick="DESIGN.visuals.mob[${t}].sub_shapes.splice(${si},1);APP.renderTab('visual')">✕ 移除</button>
+          </div>
+          <div class="form-row"><label class="form-label" style="min-width:70px">形狀</label>
+            <select class="form-select" onchange="DESIGN.visuals.mob[${t}].sub_shapes[${si}].shape=this.value">
+              ${SHAPES_MOB.map(s=>`<option value="${s}" ${ss.shape===s?'selected':''}>${SHAPE_LABELS[s]||s}</option>`).join('')}
+            </select></div>
+          <div class="form-row"><label class="form-label" style="min-width:70px">顏色</label>
+            <input type="color" class="form-input" value="${ss.color||'#ff6b35'}" onchange="DESIGN.visuals.mob[${t}].sub_shapes[${si}].color=this.value"></div>
+          <div class="form-row"><label class="form-label" style="min-width:70px">大小倍率</label>
+            <input type="range" class="form-input" min="0.2" max="2.0" step="0.1" value="${ss.size_mult||0.5}" oninput="DESIGN.visuals.mob[${t}].sub_shapes[${si}].size_mult=+this.value;this.nextElementSibling.textContent=this.value">
+            <span class="range-val">${ss.size_mult||0.5}</span></div>
+          <div class="form-row"><label class="form-label" style="min-width:70px">X 位移</label>
+            <input type="range" class="form-input" min="-60" max="60" value="${ss.offset_x||20}" oninput="DESIGN.visuals.mob[${t}].sub_shapes[${si}].offset_x=+this.value;this.nextElementSibling.textContent=this.value+'px'">
+            <span class="range-val">${ss.offset_x||20}px</span></div>
+          <div class="form-row"><label class="form-label" style="min-width:70px">Y 位移</label>
+            <input type="range" class="form-input" min="-60" max="60" value="${ss.offset_y||0}" oninput="DESIGN.visuals.mob[${t}].sub_shapes[${si}].offset_y=+this.value;this.nextElementSibling.textContent=this.value+'px'">
+            <span class="range-val">${ss.offset_y||0}px</span></div>
+          <div class="form-row"><label class="form-label" style="min-width:70px">光暈強度</label>
+            <input type="range" class="form-input" min="0" max="60" value="${ss.glow_intensity||16}" oninput="DESIGN.visuals.mob[${t}].sub_shapes[${si}].glow_intensity=+this.value;this.nextElementSibling.textContent=this.value">
+            <span class="range-val">${ss.glow_intensity||16}</span></div>
+        </div>`).join('')}
+      <button class="ed-btn ed-btn-accent" style="font-size:8px;padding:3px 8px" onclick="if(!DESIGN.visuals.mob[${t}].sub_shapes)DESIGN.visuals.mob[${t}].sub_shapes=[];DESIGN.visuals.mob[${t}].sub_shapes.push({shape:'circle',color:'#ff6b35',size_mult:0.4,offset_x:20,offset_y:0,glow_intensity:16});APP.renderTab('visual')">+ 新增子形狀</button>
 
       <hr style="border-color:var(--border);margin:14px 0">
       <div class="section-title" style="font-size:9px;color:var(--accent)">玩家外觀</div>
@@ -555,6 +651,27 @@ const TABS = {
             <select class="form-select" id="we-pattern">
               ${PATTERNS.map(p=>`<option value="${p}" ${w.pattern===p?'selected':''}>${PATTERN_LABELS[p]||p}</option>`).join('')}
             </select></div>
+          <div class="form-row"><label class="form-label" style="min-width:80px">武器類型</label>
+            <select class="form-select" id="we-type" onchange="document.getElementById('we-subpos-row').style.display=this.value==='sub'?'':'none'">
+              <option value="main" ${(w.type||'main')==='main'?'selected':''}>主武器</option>
+              <option value="sub"  ${w.type==='sub'?'selected':''}>副武器</option>
+            </select></div>
+          <div id="we-subpos-row" style="${w.type==='sub'?'':'display:none'}">
+            <div class="form-row"><label class="form-label" style="min-width:80px">裝備位置</label>
+              <select class="form-select" id="we-pos-type">
+                <option value="angle"      ${(w.sub_position?.type||'angle')==='angle'?'selected':''}>自訂角度</option>
+                <option value="both_sides" ${w.sub_position?.type==='both_sides'?'selected':''}>左右雙側</option>
+              </select></div>
+            <div class="form-row"><label class="form-label" style="min-width:80px">角度 (°)</label>
+              <input type="range" class="form-input" id="we-pos-angle" min="-180" max="180" step="15" value="${w.sub_position?.angle??90}"
+                oninput="this.nextElementSibling.textContent=this.value+'°'">
+              <span class="range-val">${w.sub_position?.angle??90}°</span>
+              <span style="font-size:8px;color:var(--muted);margin-left:6px">0=上 90=右 180=下 -90=左</span></div>
+            <div class="form-row"><label class="form-label" style="min-width:80px">距離 (px)</label>
+              <input type="range" class="form-input" id="we-pos-dist" min="10" max="60" value="${w.sub_position?.dist??25}"
+                oninput="this.nextElementSibling.textContent=this.value+'px'">
+              <span class="range-val">${w.sub_position?.dist??25}px</span></div>
+          </div>
           <div style="display:flex;gap:6px;margin-top:8px">
             <button class="ed-btn ed-btn-green" onclick="ED.saveWeaponEdit('${id}')">✓ 儲存</button>
             <button class="ed-btn" style="color:var(--muted);border-color:var(--border)" onclick="ED._editingWeaponId=null;APP.renderTab('weapon')">取消</button>
@@ -562,8 +679,10 @@ const TABS = {
         </div>` : '';
 
       return `
-        <div class="weapon-card ${isCustom?'custom-w':''} ${isEditing?'equipped':''}" style="${isDeleted?'opacity:.4':''}">
+        <div class="weapon-card ${isCustom?'custom-w':''} ${isEditing?'equipped':''} ${PREVIEW.activeWeaponId===id?'custom-w':''}" style="${isDeleted?'opacity:.4':''}">
           <div style="display:flex;align-items:center;gap:10px;width:100%">
+            <button class="ed-btn ${PREVIEW.activeWeaponId===id?'ed-btn-green':'ed-btn-accent'}" style="font-size:9px;padding:3px 7px;min-width:28px"
+              onclick="PREVIEW.activeWeaponId='${id}';APP.renderTab('weapon')" title="在預覽中使用此武器">▶</button>
             <div class="weapon-icon" style="color:${w.color}">${w.icon}</div>
             <div class="weapon-info" style="flex:1">
               <div class="weapon-name">${w.name} ${isCustom?'★':''}${isDeleted?' <span style="color:var(--danger);font-size:8px">[刪除中]</span>':''}</div>
@@ -590,85 +709,240 @@ const TABS = {
     `;
   },
 
-  // ── 玩家機制 ──────────────────────────────────────────────────
-  mechanics() {
-    const m = DESIGN.mechanics;
-    const p = m.player; const s = m.skills;
+  // ── 玩家數據 ──────────────────────────────────────────────────
+  player_data() {
+    const p = DESIGN.mechanics.player;
+    function row(label, key, min, max, step, unit='') {
+      const val = p[key] ?? 0;
+      return `<div class="form-row"><label class="form-label">${label}</label>
+        <input type="range" class="form-input" min="${min}" max="${max}" step="${step||1}" value="${val}"
+          oninput="DESIGN.mechanics.player['${key}']=+this.value;this.nextElementSibling.textContent=this.value+'${unit}'">
+        <span class="range-val">${val}${unit}</span></div>`;
+    }
     return `
-      <div class="section-title">⚡ 玩家機制設計</div>
-      <div class="form-row"><label class="form-label">最大 HP</label>
-        <input type="range" class="form-input" min="50" max="300" value="${p.max_hp}" oninput="DESIGN.mechanics.player.max_hp=+this.value;this.nextElementSibling.textContent=this.value">
-        <span class="range-val">${p.max_hp}</span>
-      </div>
-      <div class="form-row"><label class="form-label">無敵幀數</label>
-        <input type="range" class="form-input" min="30" max="180" value="${p.inv_frames}" oninput="DESIGN.mechanics.player.inv_frames=+this.value;this.nextElementSibling.textContent=this.value">
-        <span class="range-val">${p.inv_frames}</span>
-      </div>
-      <div class="form-row"><label class="form-label">Hitbox 半徑</label>
-        <input type="range" class="form-input" min="4" max="16" value="${p.player_radius}" oninput="DESIGN.mechanics.player.player_radius=+this.value;this.nextElementSibling.textContent=this.value">
-        <span class="range-val">${p.player_radius}</span>
-      </div>
-      <div class="form-row"><label class="form-label">移動平滑度</label>
-        <input type="range" class="form-input" min="0.05" max="0.3" step="0.01" value="${p.move_smoothing}" oninput="DESIGN.mechanics.player.move_smoothing=+this.value;this.nextElementSibling.textContent=this.value">
-        <span class="range-val">${p.move_smoothing}</span>
-      </div>
-      <div class="form-row"><label class="form-label">自動瞄準輔助</label>
-        <input type="range" class="form-input" min="0" max="15" value="${m.aim_assist_deg||0}" oninput="DESIGN.mechanics.aim_assist_deg=+this.value;this.nextElementSibling.textContent=this.value+'°'">
-        <span class="range-val">${m.aim_assist_deg||0}°</span>
-      </div>
+      <div class="section-title">🧬 玩家數據</div>
+      ${row('最大血量',        'max_hp',          50,  500,  1)}
+      ${row('移動速度',        'move_smoothing',  0.03, 0.5, 0.01)}
+      ${row('基礎攻擊',        'base_atk',        1,   200,  1)}
+      ${row('射速（間隔幀）',  'fire_rate',        1,    60,  1, 'f')}
+      ${row('無敵幀數',        'inv_frames',      10,  240,  1, 'f')}
+      ${row('碰撞半徑',        'player_radius',    2,   20,  1, 'px')}
+      ${row('子彈速度倍率',    'bullet_speed_mult',0.1,  5, 0.1, '×')}
+      ${row('傷害減免',        'damage_reduction', 0,   80,  1, '%')}
+      ${row('初始結晶',        'start_crystals',   0, 1000, 10)}
       <hr style="border-color:var(--border);margin:12px 0">
-      <div class="section-title" style="font-size:9px">技能系統</div>
-      <label class="form-check"><input type="checkbox" ${s.dash.enabled?'checked':''} onchange="DESIGN.mechanics.skills.dash.enabled=this.checked">閃避技能（Shift）</label>
-      ${s.dash.enabled?`
-        <div class="form-row" style="padding-left:20px"><label class="form-label">衝刺距離</label><input type="range" class="form-input" min="40" max="240" value="${s.dash.distance}" oninput="DESIGN.mechanics.skills.dash.distance=+this.value;this.nextElementSibling.textContent=this.value"><span class="range-val">${s.dash.distance}</span></div>
-        <div class="form-row" style="padding-left:20px"><label class="form-label">冷卻(秒)</label><input type="range" class="form-input" min="0.5" max="5" step="0.5" value="${s.dash.cooldown_s}" oninput="DESIGN.mechanics.skills.dash.cooldown_s=+this.value;this.nextElementSibling.textContent=this.value"><span class="range-val">${s.dash.cooldown_s}</span></div>
-      `:''}
-      <label class="form-check"><input type="checkbox" ${s.shield.enabled?'checked':''} onchange="DESIGN.mechanics.skills.shield.enabled=this.checked">護盾技能（Space）</label>
-      ${s.shield.enabled?`
-        <div class="form-row" style="padding-left:20px"><label class="form-label">護盾半徑</label><input type="range" class="form-input" min="20" max="80" value="${s.shield.radius}" oninput="DESIGN.mechanics.skills.shield.radius=+this.value;this.nextElementSibling.textContent=this.value"><span class="range-val">${s.shield.radius}</span></div>
-        <div class="form-row" style="padding-left:20px"><label class="form-label">消耗結晶</label><input type="range" class="form-input" min="0" max="30" value="${s.shield.cost_crystals}" oninput="DESIGN.mechanics.skills.shield.cost_crystals=+this.value;this.nextElementSibling.textContent=this.value"><span class="range-val">${s.shield.cost_crystals}</span></div>
-        <label class="form-check" style="padding-left:20px"><input type="checkbox" ${s.shield.deflect?'checked':''} onchange="DESIGN.mechanics.skills.shield.deflect=this.checked">能彈飛子彈</label>
-      `:''}
-      <label class="form-check"><input type="checkbox" ${s.bomb.enabled?'checked':''} onchange="DESIGN.mechanics.skills.bomb.enabled=this.checked">炸彈清場（Q）</label>
-      ${s.bomb.enabled?`
-        <div class="form-row" style="padding-left:20px"><label class="form-label">冷卻(秒)</label><input type="range" class="form-input" min="3" max="30" value="${s.bomb.cooldown_s}" oninput="DESIGN.mechanics.skills.bomb.cooldown_s=+this.value;this.nextElementSibling.textContent=this.value"><span class="range-val">${s.bomb.cooldown_s}</span></div>
-        <div class="form-row" style="padding-left:20px"><label class="form-label">消耗結晶</label><input type="range" class="form-input" min="0" max="50" value="${s.bomb.cost_crystals}" oninput="DESIGN.mechanics.skills.bomb.cost_crystals=+this.value;this.nextElementSibling.textContent=this.value"><span class="range-val">${s.bomb.cost_crystals}</span></div>
-      `:''}
-      <hr style="border-color:var(--border);margin:12px 0">
-      <label class="form-check"><input type="checkbox" ${m.combo?.enabled?'checked':''} onchange="DESIGN.mechanics.combo.enabled=this.checked">連擊傷害加成</label>
-      ${m.combo?.enabled?`
-        <div class="form-row" style="padding-left:20px"><label class="form-label">觸發連擊數</label><input type="range" class="form-input" min="5" max="50" value="${m.combo.threshold}" oninput="DESIGN.mechanics.combo.threshold=+this.value;this.nextElementSibling.textContent=this.value"><span class="range-val">${m.combo.threshold}</span></div>
-        <div class="form-row" style="padding-left:20px"><label class="form-label">傷害倍率</label><input type="range" class="form-input" min="1.1" max="3.0" step="0.1" value="${m.combo.multiplier}" oninput="DESIGN.mechanics.combo.multiplier=+this.value;this.nextElementSibling.textContent=this.value+'×'"><span class="range-val">${m.combo.multiplier}×</span></div>
-      `:''}
+      <button class="ed-btn ed-btn-green" onclick="PREVIEW.restart()">▶ 更新預覽</button>
     `;
   },
 
-  // ── 敵人特殊能力 ──────────────────────────────────────────────
-  abilities(poi) {
-    const t = currentThreat;
-    const ba = DESIGN.abilities.boss_abilities[t] || {};
-    const ma = DESIGN.abilities.mob_abilities[t]  || {};
-    return `
-      <div class="section-title">💥 敵人特殊能力</div>
-      <div class="threat-tabs">${[1,2,3,4,5].map(i=>`<button class="threat-tab ${i===t?'active':''}" onclick="currentThreat=${i};APP.renderTab('abilities')">Lv.${i}</button>`).join('')}</div>
-      <div class="section-title" style="font-size:9px;color:var(--boss)">Boss 特殊能力 — Lv.${t}</div>
-      <label class="form-check"><input type="checkbox" ${ba.shield_phase?.enabled?'checked':''} onchange="ED.setAbility('boss',${t},'shield_phase','enabled',this.checked)">Phase 切換時護盾無敵</label>
-      ${ba.shield_phase?.enabled?`<div class="form-row" style="padding-left:20px"><label class="form-label">無敵幀數</label><input type="range" class="form-input" min="30" max="300" value="${ba.shield_phase?.inv_frames||120}" oninput="ED.setAbility('boss',${t},'shield_phase','inv_frames',+this.value);this.nextElementSibling.textContent=this.value"><span class="range-val">${ba.shield_phase?.inv_frames||120}</span></div>`:''}
-      <label class="form-check"><input type="checkbox" ${ba.teleport?.enabled?'checked':''} onchange="ED.setAbility('boss',${t},'teleport','enabled',this.checked)">HP 閾值瞬移</label>
-      ${ba.teleport?.enabled?`<div class="form-row" style="padding-left:20px"><label class="form-label">HP 觸發比例</label><input type="range" class="form-input" min="0.1" max="0.9" step="0.05" value="${ba.teleport?.hp_threshold||0.3}" oninput="ED.setAbility('boss',${t},'teleport','hp_threshold',+this.value);this.nextElementSibling.textContent=(+this.value*100|0)+'%'"><span class="range-val">${((ba.teleport?.hp_threshold||0.3)*100|0)}%</span></div>`:''}
-      <label class="form-check"><input type="checkbox" ${ba.enrage_timer?.enabled?'checked':''} onchange="ED.setAbility('boss',${t},'enrage_timer','enabled',this.checked)">狂暴計時</label>
-      ${ba.enrage_timer?.enabled?`
-        <div class="form-row" style="padding-left:20px"><label class="form-label">觸發秒數</label><input type="range" class="form-input" min="10" max="120" value="${ba.enrage_timer?.trigger_s||60}" oninput="ED.setAbility('boss',${t},'enrage_timer','trigger_s',+this.value);this.nextElementSibling.textContent=this.value+'s'"><span class="range-val">${ba.enrage_timer?.trigger_s||60}s</span></div>
-        <div class="form-row" style="padding-left:20px"><label class="form-label">速度倍率</label><input type="range" class="form-input" min="1.2" max="4.0" step="0.1" value="${ba.enrage_timer?.speed_mult||2.0}" oninput="ED.setAbility('boss',${t},'enrage_timer','speed_mult',+this.value);this.nextElementSibling.textContent=this.value+'×'"><span class="range-val">${ba.enrage_timer?.speed_mult||2.0}×</span></div>
-      `:''}
-      <label class="form-check"><input type="checkbox" ${ba.clone?.enabled?'checked':''} onchange="ED.setAbility('boss',${t},'clone','enabled',this.checked)">低HP分身</label>
-      ${ba.clone?.enabled?`<div class="form-row" style="padding-left:20px"><label class="form-label">分身數量</label><input type="range" class="form-input" min="1" max="3" value="${ba.clone?.count||1}" oninput="ED.setAbility('boss',${t},'clone','count',+this.value);this.nextElementSibling.textContent=this.value"><span class="range-val">${ba.clone?.count||1}</span></div>`:''}
-      <hr style="border-color:var(--border);margin:12px 0">
-      <div class="section-title" style="font-size:9px;color:var(--mob)">小怪特殊能力 — Lv.${t}</div>
-      <label class="form-check"><input type="checkbox" ${ma.explode_on_death?.enabled?'checked':''} onchange="ED.setAbility('mob',${t},'explode_on_death','enabled',this.checked)">死亡爆炸散射</label>
-      ${ma.explode_on_death?.enabled?`<div class="form-row" style="padding-left:20px"><label class="form-label">散射子彈數</label><input type="range" class="form-input" min="4" max="20" value="${ma.explode_on_death?.bullet_count||8}" oninput="ED.setAbility('mob',${t},'explode_on_death','bullet_count',+this.value);this.nextElementSibling.textContent=this.value"><span class="range-val">${ma.explode_on_death?.bullet_count||8}</span></div>`:''}
-      <label class="form-check"><input type="checkbox" ${ma.suicide_charge?.enabled?'checked':''} onchange="ED.setAbility('mob',${t},'suicide_charge','enabled',this.checked)">死亡前衝向玩家</label>
-    `;
+  // ── 敵人數據 ──────────────────────────────────────────────────
+  enemy_data() {
+    const eType=currentEnemyType, expId=currentEnemyExpanded;
+    const SHAPES_BOSS=['diamond','circle','pentagon','star','cross'];
+    const SHAPES_MOB=['hexagon','square','triangle','circle','star'];
+    const SL={diamond:'菱形',circle:'圓形',pentagon:'五邊形',star:'星形',cross:'十字',hexagon:'六邊形',square:'方形',triangle:'三角形'};
+    const ML={wobble:'正弦擺動',circular:'圓形軌道',figure8:'8字形',track_player_x:'跟隨X軸',static:'固定靜止'};
+    if(!DESIGN.custom_pois)DESIGN.custom_pois=[];
+    if(!DESIGN.mob_counts)DESIGN.mob_counts={};
+
+    const typeBar=`<div style="display:flex;gap:6px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border)">
+      <button class="ed-btn ${eType==='mob'?'ed-btn-accent':''}" onclick="currentEnemyType='mob';currentEnemyExpanded=null;APP.renderTab('enemy_data')">小怪</button>
+      <button class="ed-btn ${eType==='boss'?'ed-btn-accent':''}" onclick="currentEnemyType='boss';currentEnemyExpanded=null;APP.renderTab('enemy_data')">BOSS</button>
+      <button class="ed-btn" style="margin-left:auto" onclick="ED.addCustomPoi('${eType}')">+ 新增</button>
+    </div>`;
+
+    const _ss=(arr,vt,th)=>arr.map((ss,si)=>`
+      <div style="background:rgba(${vt==='mob'?'255,107,53':'255,26,110'},.06);border:1px solid rgba(${vt==='mob'?'255,107,53':'255,26,110'},.2);border-radius:4px;padding:6px;margin-bottom:4px">
+        <div style="display:flex;gap:6px;align-items:center;margin-bottom:4px"><span style="font-size:9px;color:var(--${vt})">子形狀${si+1}</span>
+          <button class="ed-btn ed-btn-danger" style="font-size:8px;padding:1px 5px" onclick="DESIGN.visuals.${vt}[${th}].sub_shapes.splice(${si},1);APP.renderTab('enemy_data')">✕</button></div>
+        <div class="form-row"><label class="form-label" style="min-width:60px">形狀</label>
+          <select class="form-select" onchange="DESIGN.visuals.${vt}[${th}].sub_shapes[${si}].shape=this.value">
+            ${(vt==='mob'?SHAPES_MOB:SHAPES_BOSS).map(s=>`<option value="${s}" ${ss.shape===s?'selected':''}>${SL[s]||s}</option>`).join('')}</select></div>
+        <div class="form-row"><label class="form-label" style="min-width:60px">顏色</label>
+          <input type="color" class="form-input" value="${ss.color||'#ff6b35'}" onchange="DESIGN.visuals.${vt}[${th}].sub_shapes[${si}].color=this.value"></div>
+        <div class="form-row"><label class="form-label" style="min-width:60px">大小倍率</label>
+          <input type="range" class="form-input" min="0.2" max="2.0" step="0.1" value="${ss.size_mult||0.5}" oninput="DESIGN.visuals.${vt}[${th}].sub_shapes[${si}].size_mult=+this.value;this.nextElementSibling.textContent=this.value">
+          <span class="range-val">${ss.size_mult||0.5}</span></div>
+        <div class="form-row"><label class="form-label" style="min-width:60px">X 位移</label>
+          <input type="range" class="form-input" min="-80" max="80" value="${ss.offset_x||0}" oninput="DESIGN.visuals.${vt}[${th}].sub_shapes[${si}].offset_x=+this.value;this.nextElementSibling.textContent=this.value+'px'">
+          <span class="range-val">${ss.offset_x||0}px</span></div>
+        <div class="form-row"><label class="form-label" style="min-width:60px">Y 位移</label>
+          <input type="range" class="form-input" min="-80" max="80" value="${ss.offset_y||0}" oninput="DESIGN.visuals.${vt}[${th}].sub_shapes[${si}].offset_y=+this.value;this.nextElementSibling.textContent=this.value+'px'">
+          <span class="range-val">${ss.offset_y||0}px</span></div>
+        <div class="form-row"><label class="form-label" style="min-width:60px">光暈</label>
+          <input type="range" class="form-input" min="0" max="80" value="${ss.glow_intensity||20}" oninput="DESIGN.visuals.${vt}[${th}].sub_shapes[${si}].glow_intensity=+this.value;this.nextElementSibling.textContent=this.value">
+          <span class="range-val">${ss.glow_intensity||20}</span></div>
+        ${vt==='boss'?`<div class="form-row"><label class="form-label" style="min-width:60px">輻條數</label>
+          <input type="range" class="form-input" min="0" max="12" value="${ss.spoke_count||0}" oninput="DESIGN.visuals.boss[${th}].sub_shapes[${si}].spoke_count=+this.value;this.nextElementSibling.textContent=this.value">
+          <span class="range-val">${ss.spoke_count||0}</span></div>`:''}
+      </div>`).join('');
+
+    const allPois=[...DEV_POIS,...DESIGN.custom_pois];
+    const list=allPois.filter(p=>p.type===eType);
+
+    const cards=list.map(poi=>{
+      const isExp=expId===poi.id, t=poi.threat, key=`threat_${t}`;
+      const isCustom=DESIGN.custom_pois.some(p=>p.id===poi.id);
+      const mc=DESIGN.mob_counts[t]??poi.mob_count??3;
+      const hdrClick=isExp?`currentEnemyExpanded=null;APP.renderTab('enemy_data')`:`currentEnemyExpanded='${poi.id}';APP.renderTab('enemy_data')`;
+      const hdr=`<div style="display:flex;align-items:center;gap:8px;width:100%;cursor:pointer" onclick="${hdrClick}">
+        <div class="pi-badge ${eType}">${eType.toUpperCase()} Lv.${t}</div>
+        <div style="flex:1;font-size:11px;color:var(--text)">${poi.name}</div>
+        ${isCustom?`<button class="ed-btn ed-btn-danger" style="font-size:8px;padding:1px 5px" onclick="event.stopPropagation();ED.removeCustomPoi('${poi.id}')">✕</button>`:''}
+        <button class="ed-btn ed-btn-accent" style="font-size:8px;padding:2px 6px" onclick="event.stopPropagation();APP.previewPoiById('${poi.id}')">▶</button>
+        <span style="font-size:9px;color:${isExp?'var(--accent)':'var(--muted)'}">${isExp?'▼':'›'}</span>
+      </div>`;
+      if(!isExp)return `<div class="weapon-card" style="margin-bottom:4px">${hdr}</div>`;
+
+      const bv=DESIGN.visuals.boss[t]||{}, mv=DESIGN.visuals.mob[t]||{};
+      const ba=DESIGN.abilities.boss_abilities[t]||{}, ma=DESIGN.abilities.mob_abilities[t]||{};
+      const bossName=(DESIGN.lore?.boss_names||[])[t-1]||'';
+      const phases=DESIGN.patterns[key]||[];
+      const movT=DESIGN.visuals?.boss_movement?.[t]?.type||'wobble';
+
+      const basicHTML=eType==='mob'?`
+        ${isCustom?`<div class="form-row"><label class="form-label">名稱</label><input class="form-input" value="${poi.name}" oninput="DESIGN.custom_pois.find(p=>p.id==='${poi.id}').name=this.value"></div>
+        <div class="form-row"><label class="form-label">威脅等級</label><select class="form-select" style="flex:none;width:60px" onchange="DESIGN.custom_pois.find(p=>p.id==='${poi.id}').threat=+this.value;APP.renderTab('enemy_data')">${[1,2,3,4,5].map(lv=>`<option value="${lv}" ${t===lv?'selected':''}>Lv.${lv}</option>`).join('')}</select></div>`:''}
+        <div class="form-row"><label class="form-label">小怪數量</label>
+          <input type="range" class="form-input" min="1" max="15" value="${mc}" oninput="if(!DESIGN.mob_counts)DESIGN.mob_counts={};DESIGN.mob_counts[${t}]=+this.value;this.nextElementSibling.textContent=this.value;PREVIEW.restart()">
+          <span class="range-val">${mc}</span></div>
+        <div class="form-row"><label class="form-label">名稱前綴</label>
+          <input class="form-input" value="${(DESIGN.lore?.mob_prefixes||[])[t-1]||''}" oninput="if(!DESIGN.lore.mob_prefixes)DESIGN.lore.mob_prefixes=[];DESIGN.lore.mob_prefixes[${t-1}]=this.value"></div>
+      `:`
+        ${isCustom?`<div class="form-row"><label class="form-label">名稱</label><input class="form-input" value="${poi.name}" oninput="DESIGN.custom_pois.find(p=>p.id==='${poi.id}').name=this.value"></div>
+        <div class="form-row"><label class="form-label">威脅等級</label><select class="form-select" style="flex:none;width:60px" onchange="DESIGN.custom_pois.find(p=>p.id==='${poi.id}').threat=+this.value;APP.renderTab('enemy_data')">${[1,2,3,4,5].map(lv=>`<option value="${lv}" ${t===lv?'selected':''}>Lv.${lv}</option>`).join('')}</select></div>`:''}
+        <div class="form-row"><label class="form-label">Boss 名稱</label>
+          <input class="form-input" value="${bossName}" placeholder="未命名 Boss" onchange="if(!DESIGN.lore.boss_names)DESIGN.lore.boss_names=[];DESIGN.lore.boss_names[${t-1}]=this.value"></div>
+      `;
+
+      const visualHTML=eType==='mob'?`
+        <div class="form-row"><label class="form-label">形狀</label>
+          <select class="form-select" onchange="ED.setVisualMob(${t},'shape',this.value)">${SHAPES_MOB.map(s=>`<option value="${s}" ${mv.shape===s?'selected':''}>${SL[s]||s}</option>`).join('')}</select></div>
+        <div class="form-row"><label class="form-label">主體顏色</label>
+          <input type="color" class="form-input" value="${mv.primary_color||'#ff6b35'}" onchange="ED.setVisualMob(${t},'primary_color',this.value)"></div>
+        <div class="form-row"><label class="form-label">光暈強度</label>
+          <input type="range" class="form-input" min="10" max="80" value="${mv.glow_intensity||24}" oninput="ED.setVisualMob(${t},'glow_intensity',+this.value);this.nextElementSibling.textContent=this.value">
+          <span class="range-val">${mv.glow_intensity||24}</span></div>
+        <div class="form-row"><label class="form-label">大小倍率</label>
+          <input type="range" class="form-input" min="0.5" max="2.0" step="0.1" value="${mv.size_multiplier||1.0}" oninput="ED.setVisualMob(${t},'size_multiplier',+this.value);this.nextElementSibling.textContent=this.value">
+          <span class="range-val">${mv.size_multiplier||1.0}</span></div>
+        <label class="form-check"><input type="checkbox" ${mv.show_hp_bar!==false?'checked':''} onchange="ED.setVisualMob(${t},'show_hp_bar',this.checked)">顯示血條</label>
+        ${_ss(mv.sub_shapes||[],'mob',t)}
+        <button class="ed-btn ed-btn-accent" style="font-size:8px;padding:2px 7px;margin-top:4px" onclick="if(!DESIGN.visuals.mob[${t}])DESIGN.visuals.mob[${t}]={};if(!DESIGN.visuals.mob[${t}].sub_shapes)DESIGN.visuals.mob[${t}].sub_shapes=[];DESIGN.visuals.mob[${t}].sub_shapes.push({shape:'circle',color:'#ff6b35',size_mult:0.4,offset_x:0,offset_y:0,glow_intensity:16});APP.renderTab('enemy_data')">+ 子形狀</button>
+      `:`
+        <div class="form-row"><label class="form-label">形狀</label>
+          <select class="form-select" onchange="ED.setVisualBoss(${t},'shape',this.value)">${SHAPES_BOSS.map(s=>`<option value="${s}" ${bv.shape===s?'selected':''}>${SL[s]||s}</option>`).join('')}</select></div>
+        <div class="form-row"><label class="form-label">主體顏色</label>
+          <input type="color" class="form-input" value="${bv.primary_color||'#ff1a6e'}" onchange="ED.setVisualBoss(${t},'primary_color',this.value)"></div>
+        <div class="form-row"><label class="form-label">光環輻條數</label>
+          <input type="range" class="form-input" min="0" max="12" value="${bv.spoke_count||6}" oninput="ED.setVisualBoss(${t},'spoke_count',+this.value);this.nextElementSibling.textContent=this.value">
+          <span class="range-val">${bv.spoke_count||6}</span></div>
+        <div class="form-row"><label class="form-label">光暈強度</label>
+          <input type="range" class="form-input" min="10" max="100" value="${bv.glow_intensity||50}" oninput="ED.setVisualBoss(${t},'glow_intensity',+this.value);this.nextElementSibling.textContent=this.value">
+          <span class="range-val">${bv.glow_intensity||50}</span></div>
+        <div class="form-row"><label class="form-label">大小倍率</label>
+          <input type="range" class="form-input" min="0.5" max="2.0" step="0.1" value="${bv.size_multiplier||1.0}" oninput="ED.setVisualBoss(${t},'size_multiplier',+this.value);this.nextElementSibling.textContent=this.value">
+          <span class="range-val">${bv.size_multiplier||1.0}</span></div>
+        ${_ss(bv.sub_shapes||[],'boss',t)}
+        <button class="ed-btn ed-btn-accent" style="font-size:8px;padding:2px 7px;margin-top:4px" onclick="if(!DESIGN.visuals.boss[${t}])DESIGN.visuals.boss[${t}]={};if(!DESIGN.visuals.boss[${t}].sub_shapes)DESIGN.visuals.boss[${t}].sub_shapes=[];DESIGN.visuals.boss[${t}].sub_shapes.push({shape:'circle',color:'#ff1a6e',size_mult:0.5,offset_x:30,offset_y:0,glow_intensity:20,spoke_count:0});APP.renderTab('enemy_data')">+ 子形狀</button>
+      `;
+
+      const phaseCards=phases.map((p,i)=>{
+        const pm=p.movement_type||movT;
+        return `<div class="phase-card">
+          <div class="phase-header">
+            <span class="phase-label">PHASE ${p.phase}</span>
+            <button class="ed-btn ed-btn-accent" style="font-size:8px;padding:2px 7px" onclick="PREVIEW.setForcedPhase(${p.phase})">▶</button>
+            <button class="ed-btn ed-btn-danger" style="font-size:8px;padding:2px 7px" onclick="ED.removePhase('${key}',${i})">刪除</button>
+          </div>
+          ${eType==='boss'?`<div class="form-row"><label class="form-label">Boss 移動</label>
+            <select class="form-select" style="flex:none;width:130px" onchange="ED.setPhase('${key}',${i},'movement_type',this.value)">
+              ${['wobble','circular','figure8','track_player_x','static'].map(m=>`<option value="${m}" ${pm===m?'selected':''}>${ML[m]}</option>`).join('')}</select></div>`:''}
+          <div class="form-row"><label class="form-label">攻擊類型</label>
+            <select class="form-select" style="flex:none;width:110px" onchange="ED.setPhase('${key}',${i},'type',this.value)">
+              ${['radial','spiral','aimed','wave','chaos','parabola'].map(tt=>`<option value="${tt}" ${p.type===tt?'selected':''}>${{radial:'放射',spiral:'螺旋',aimed:'瞄準',wave:'波浪',chaos:'混沌',parabola:'拋物線'}[tt]}</option>`).join('')}</select></div>
+          <div class="form-row"><label class="form-label">子彈數</label>
+            <input type="range" class="form-input" min="1" max="30" value="${p.count}" oninput="ED.setPhase('${key}',${i},'count',+this.value);this.nextElementSibling.textContent=this.value">
+            <span class="range-val">${p.count}</span></div>
+          <div class="form-row"><label class="form-label">速度</label>
+            <input type="range" class="form-input" min="0.5" max="15" step="0.5" value="${p.speed}" oninput="ED.setPhase('${key}',${i},'speed',+this.value);this.nextElementSibling.textContent=this.value">
+            <span class="range-val">${p.speed}</span></div>
+          <div class="form-row"><label class="form-label">HP 閾值</label>
+            <input type="range" class="form-input" min="0.05" max="1.0" step="0.05" value="${p.hp_threshold}" oninput="ED.setPhase('${key}',${i},'hp_threshold',+this.value);this.nextElementSibling.textContent=(+this.value*100|0)+'%'">
+            <span class="range-val">${(p.hp_threshold*100|0)}%</span></div>
+          <div class="form-row"><label class="form-label">射擊間隔(幀)</label>
+            <input type="range" class="form-input" min="8" max="120" value="${p.fire_interval}" oninput="ED.setPhase('${key}',${i},'fire_interval',+this.value);this.nextElementSibling.textContent=this.value">
+            <span class="range-val">${p.fire_interval}</span></div>
+          <div class="form-row"><label class="form-label">傷害</label>
+            <input type="range" class="form-input" min="1" max="100" value="${p.damage}" oninput="ED.setPhase('${key}',${i},'damage',+this.value);this.nextElementSibling.textContent=this.value">
+            <span class="range-val">${p.damage}</span></div>
+          <div class="form-row"><label class="form-label">子彈半徑</label>
+            <input type="range" class="form-input" min="2" max="20" value="${p.r}" oninput="ED.setPhase('${key}',${i},'r',+this.value);this.nextElementSibling.textContent=this.value">
+            <span class="range-val">${p.r}</span></div>
+          <div class="form-row"><label class="form-label">子彈顏色</label>
+            <input type="color" class="form-input" value="${p.color}" onchange="ED.setPhase('${key}',${i},'color',this.value)"></div>
+          <div class="form-row"><label class="form-label">存活幀數</label>
+            <input type="range" class="form-input" min="60" max="600" step="20" value="${p.maxLife}" oninput="ED.setPhase('${key}',${i},'maxLife',+this.value);this.nextElementSibling.textContent=this.value">
+            <span class="range-val">${p.maxLife}</span></div>
+          <div class="form-row"><label class="form-label">發射路線</label>
+            <select class="form-select" style="flex:none;width:90px" onchange="ED.setPhase('${key}',${i},'trajectory',this.value);APP.renderTab('enemy_data')">
+              ${['straight','curve'].map(tr=>`<option value="${tr}" ${(p.trajectory||'straight')===tr?'selected':''}>${{straight:'直線',curve:'曲線'}[tr]}</option>`).join('')}</select></div>
+          ${(p.trajectory||'straight')==='curve'?`<div class="form-row"><label class="form-label">彎曲度</label>
+            <input type="range" class="form-input" min="-0.15" max="0.15" step="0.005" value="${p.curve_bend||0.03}" oninput="ED.setPhase('${key}',${i},'curve_bend',+this.value);this.nextElementSibling.textContent=(+this.value).toFixed(3)">
+            <span class="range-val">${(p.curve_bend||0.03).toFixed(3)}</span></div>`:''}
+          <div class="form-row"><label class="form-label">發射來源</label>
+            <select class="form-select" style="flex:none;width:100px" onchange="ED.setPhase('${key}',${i},'launch_source',this.value);APP.renderTab('enemy_data')">
+              ${['monster','top','bottom','left','right','fixed'].map(s=>`<option value="${s}" ${(p.launch_source||'monster')===s?'selected':''}>${{monster:'怪物位置',top:'上方',bottom:'下方',left:'左方',right:'右方',fixed:'固定'}[s]}</option>`).join('')}</select></div>
+          ${(p.launch_source||'monster')==='fixed'?`
+            <div class="form-row" style="padding-left:16px"><label class="form-label">固定 X</label>
+              <input type="range" class="form-input" min="0" max="400" value="${p.fixed_x||200}" oninput="ED.setPhase('${key}',${i},'fixed_x',+this.value);this.nextElementSibling.textContent=this.value">
+              <span class="range-val">${p.fixed_x||200}</span></div>
+            <div class="form-row" style="padding-left:16px"><label class="form-label">固定 Y</label>
+              <input type="range" class="form-input" min="0" max="400" value="${p.fixed_y||80}" oninput="ED.setPhase('${key}',${i},'fixed_y',+this.value);this.nextElementSibling.textContent=this.value">
+              <span class="range-val">${p.fixed_y||80}</span></div>`:''}
+          <div class="form-row"><label class="form-label">發射角偏移</label>
+            <input type="range" class="form-input" min="-180" max="180" value="${p.dir_offset||0}" oninput="ED.setPhase('${key}',${i},'dir_offset',+this.value);this.nextElementSibling.textContent=this.value+'°'">
+            <span class="range-val">${p.dir_offset||0}°</span>
+            <span style="font-size:8px;color:var(--muted);margin-left:4px">（或拖移預覽箭頭）</span></div>
+        </div>`;
+      }).join('');
+
+      const abilityHTML=eType==='mob'?`
+        <label class="form-check"><input type="checkbox" ${ma.explode_on_death?.enabled?'checked':''} onchange="ED.setAbility('mob',${t},'explode_on_death','enabled',this.checked)">死亡爆炸散射</label>
+        ${ma.explode_on_death?.enabled?`<div class="form-row" style="padding-left:20px"><label class="form-label">散射子彈數</label><input type="range" class="form-input" min="4" max="20" value="${ma.explode_on_death?.bullet_count||8}" oninput="ED.setAbility('mob',${t},'explode_on_death','bullet_count',+this.value);this.nextElementSibling.textContent=this.value"><span class="range-val">${ma.explode_on_death?.bullet_count||8}</span></div>`:''}
+        <label class="form-check"><input type="checkbox" ${ma.suicide_charge?.enabled?'checked':''} onchange="ED.setAbility('mob',${t},'suicide_charge','enabled',this.checked)">死亡前衝向玩家</label>
+      `:`
+        <label class="form-check"><input type="checkbox" ${ba.shield_phase?.enabled?'checked':''} onchange="ED.setAbility('boss',${t},'shield_phase','enabled',this.checked)">Phase 切換時護盾無敵</label>
+        ${ba.shield_phase?.enabled?`<div class="form-row" style="padding-left:20px"><label class="form-label">無敵幀數</label><input type="range" class="form-input" min="30" max="300" value="${ba.shield_phase?.inv_frames||120}" oninput="ED.setAbility('boss',${t},'shield_phase','inv_frames',+this.value);this.nextElementSibling.textContent=this.value"><span class="range-val">${ba.shield_phase?.inv_frames||120}</span></div>`:''}
+        <label class="form-check"><input type="checkbox" ${ba.teleport?.enabled?'checked':''} onchange="ED.setAbility('boss',${t},'teleport','enabled',this.checked)">HP 閾值瞬移</label>
+        ${ba.teleport?.enabled?`<div class="form-row" style="padding-left:20px"><label class="form-label">HP 觸發比例</label><input type="range" class="form-input" min="0.1" max="0.9" step="0.05" value="${ba.teleport?.hp_threshold||0.3}" oninput="ED.setAbility('boss',${t},'teleport','hp_threshold',+this.value);this.nextElementSibling.textContent=(+this.value*100|0)+'%'"><span class="range-val">${((ba.teleport?.hp_threshold||0.3)*100|0)}%</span></div>`:''}
+        <label class="form-check"><input type="checkbox" ${ba.enrage_timer?.enabled?'checked':''} onchange="ED.setAbility('boss',${t},'enrage_timer','enabled',this.checked)">狂暴計時</label>
+        ${ba.enrage_timer?.enabled?`<div class="form-row" style="padding-left:20px"><label class="form-label">觸發秒數</label><input type="range" class="form-input" min="10" max="120" value="${ba.enrage_timer?.trigger_s||60}" oninput="ED.setAbility('boss',${t},'enrage_timer','trigger_s',+this.value);this.nextElementSibling.textContent=this.value+'s'"><span class="range-val">${ba.enrage_timer?.trigger_s||60}s</span></div><div class="form-row" style="padding-left:20px"><label class="form-label">速度倍率</label><input type="range" class="form-input" min="1.2" max="4.0" step="0.1" value="${ba.enrage_timer?.speed_mult||2.0}" oninput="ED.setAbility('boss',${t},'enrage_timer','speed_mult',+this.value);this.nextElementSibling.textContent=this.value+'×'"><span class="range-val">${ba.enrage_timer?.speed_mult||2.0}×</span></div>`:''}
+        <label class="form-check"><input type="checkbox" ${ba.clone?.enabled?'checked':''} onchange="ED.setAbility('boss',${t},'clone','enabled',this.checked)">低HP分身</label>
+        ${ba.clone?.enabled?`<div class="form-row" style="padding-left:20px"><label class="form-label">分身數量</label><input type="range" class="form-input" min="1" max="3" value="${ba.clone?.count||1}" oninput="ED.setAbility('boss',${t},'clone','count',+this.value);this.nextElementSibling.textContent=this.value"><span class="range-val">${ba.clone?.count||1}</span></div>`:''}
+      `;
+
+      return `<div class="weapon-card ${isExp?'equipped':''}" style="margin-bottom:6px">
+        ${hdr}
+        <div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px">
+          <div class="section-title" style="font-size:9px">基本設定</div>${basicHTML}
+          <hr style="border-color:var(--border);margin:8px 0">
+          <div class="section-title" style="font-size:9px">外觀設計</div>${visualHTML}
+          <hr style="border-color:var(--border);margin:8px 0">
+          <div class="section-title" style="font-size:9px">⚡ 彈幕 Phase</div>
+          ${phaseCards}
+          <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
+            <button class="ed-btn ed-btn-accent" onclick="ED.addPhase('${key}')">+ 新增 Phase</button>
+            <button class="ed-btn" style="font-size:8px;padding:3px 8px" onclick="PREVIEW.setForcedPhase(-1)">自動（依HP）</button>
+            <button class="ed-btn ed-btn-green" onclick="PREVIEW.restart()">▶ 更新預覽</button>
+          </div>
+          <hr style="border-color:var(--border);margin:8px 0">
+          <div class="section-title" style="font-size:9px">特殊能力</div>${abilityHTML}
+        </div>
+      </div>`;
+    }).join('');
+
+    return `<div class="section-title">👾 敵人數據</div>${typeBar}${cards||'<div style="color:var(--muted);text-align:center;padding:20px;font-size:10px">尚無項目</div>'}`;
   },
 
   // ── 遊戲平衡 ──────────────────────────────────────────────────
@@ -782,65 +1056,46 @@ const TABS = {
       <div class="form-row"><label class="form-label">遊戲標題</label>
         <input class="form-input" value="${l.game_title}" onchange="DESIGN.lore.game_title=this.value">
       </div>
-      <hr style="border-color:var(--border);margin:10px 0">
-      <div class="section-title" style="font-size:9px">Boss 名稱庫</div>
-      <div id="boss-names-list">
-        ${l.boss_names.map((n,i)=>`
-          <div class="form-row" style="margin-bottom:4px">
-            <input class="form-input" value="${n}" onchange="DESIGN.lore.boss_names[${i}]=this.value">
-            <button class="ed-btn ed-btn-danger" style="font-size:8px;padding:3px 6px;flex:none" onclick="DESIGN.lore.boss_names.splice(${i},1);APP.renderTab('lore')">✕</button>
-          </div>
-        `).join('')}
-      </div>
-      <button class="ed-btn ed-btn-accent" style="margin-bottom:12px" onclick="DESIGN.lore.boss_names.push('新 Boss 名稱');APP.renderTab('lore')">+ 新增</button>
-      <hr style="border-color:var(--border);margin:10px 0">
-      <div class="section-title" style="font-size:9px">小怪名稱前綴</div>
-      ${l.mob_prefixes.map((n,i)=>`
-        <div class="form-row" style="margin-bottom:4px">
-          <input class="form-input" value="${n}" onchange="DESIGN.lore.mob_prefixes[${i}]=this.value">
-          <button class="ed-btn ed-btn-danger" style="font-size:8px;padding:3px 6px;flex:none" onclick="DESIGN.lore.mob_prefixes.splice(${i},1);APP.renderTab('lore')">✕</button>
-        </div>
-      `).join('')}
-      <button class="ed-btn ed-btn-accent" style="margin-bottom:12px" onclick="DESIGN.lore.mob_prefixes.push('新前綴');APP.renderTab('lore')">+ 新增</button>
-      <hr style="border-color:var(--border);margin:10px 0">
-      <div class="section-title" style="font-size:9px">勝利台詞</div>
-      ${l.victory_lines.map((n,i)=>`<div class="form-row" style="margin-bottom:4px"><input class="form-input" value="${n}" onchange="DESIGN.lore.victory_lines[${i}]=this.value"><button class="ed-btn ed-btn-danger" style="font-size:8px;padding:3px 6px;flex:none" onclick="DESIGN.lore.victory_lines.splice(${i},1);APP.renderTab('lore')">✕</button></div>`).join('')}
-      <button class="ed-btn ed-btn-accent" style="margin-bottom:12px" onclick="DESIGN.lore.victory_lines.push('新台詞');APP.renderTab('lore')">+ 新增</button>
-      <hr style="border-color:var(--border);margin:10px 0">
-      <div class="section-title" style="font-size:9px">失敗台詞</div>
-      ${l.defeat_lines.map((n,i)=>`<div class="form-row" style="margin-bottom:4px"><input class="form-input" value="${n}" onchange="DESIGN.lore.defeat_lines[${i}]=this.value"><button class="ed-btn ed-btn-danger" style="font-size:8px;padding:3px 6px;flex:none" onclick="DESIGN.lore.defeat_lines.splice(${i},1);APP.renderTab('lore')">✕</button></div>`).join('')}
-      <button class="ed-btn ed-btn-accent" onclick="DESIGN.lore.defeat_lines.push('新台詞');APP.renderTab('lore')">+ 新增</button>
     `;
   },
 
   // ── 音效 ──────────────────────────────────────────────────────
   sfx() {
     const EVENTS = [
-      ['shoot_single',   '脈衝槍射擊',   {freq:1200,freq2:800, duration:0.06,type:'square',  vol:0.04}],
-      ['shoot_seeker',   '導彈發射',     {freq:900, freq2:1100,duration:0.08,type:'sine',     vol:0.05}],
-      ['enemy_hit',      '敵方受擊',     {freq:380, freq2:200, duration:0.07,type:'sawtooth', vol:0.07}],
-      ['player_hit',     '玩家受擊',     {freq:150, freq2:80,  duration:0.2, type:'sine',     vol:0.12}],
-      ['phase_change',   'Phase 切換',   {freq:220, freq2:440, duration:0.3, type:'square',   vol:0.10}],
-      ['victory_note1',  '勝利音1',      {freq:523, freq2:523, duration:0.18,type:'square',   vol:0.08}],
-      ['defeat_note1',   '失敗音1',      {freq:400, freq2:280, duration:0.22,type:'sawtooth', vol:0.07}],
+      ['shoot_single',  '脈衝槍射擊', {freq:1200,freq2:800, dur:0.06,type:'square',  vol:0.04}],
+      ['shoot_seeker',  '導彈發射',   {freq:900, freq2:1100,dur:0.08,type:'sine',     vol:0.05}],
+      ['enemy_hit',     '敵方受擊',   {freq:380, freq2:200, dur:0.07,type:'sawtooth', vol:0.07}],
+      ['player_hit',    '玩家受擊',   {freq:150, freq2:80,  dur:0.2, type:'sine',     vol:0.12}],
+      ['phase_change',  'Phase 切換', {freq:220, freq2:440, dur:0.3, type:'square',   vol:0.10}],
+      ['victory_note1', '勝利音',     {freq:523, freq2:523, dur:0.18,type:'square',   vol:0.08}],
+      ['defeat_note1',  '失敗音',     {freq:400, freq2:280, dur:0.22,type:'sawtooth', vol:0.07}],
     ];
     const sfx = DESIGN.sfx;
     return `
       <div class="section-title">🔊 音效設計</div>
-      <div class="info-box">點「試聽」按鈕即時聆聽音效。調整後點試聽確認效果。</div>
-      ${EVENTS.map(([id, label, defaults]) => {
-        const cur = sfx[id] || defaults;
+      <div class="info-box">調整滑桿後點「▶ 試聽」即時確認效果。</div>
+      ${EVENTS.map(([id, label, def]) => {
+        const cur = {...def, ...(sfx[id]||{})};
         return `
-          <div class="sfx-row">
-            <span class="sfx-name">${label}</span>
-            <span style="font-size:9px;color:var(--muted);flex:1">頻率</span>
-            <input type="range" style="width:60px;accent-color:var(--accent)" min="50" max="4000" value="${cur.freq}" oninput="if(!DESIGN.sfx['${id}'])DESIGN.sfx['${id}']={...${JSON.stringify(defaults)}};DESIGN.sfx['${id}'].freq=+this.value">
+          <div class="sfx-row" style="flex-wrap:wrap;gap:4px 8px">
+            <span class="sfx-name" style="min-width:70px">${label}</span>
+            <span style="font-size:9px;color:var(--muted)">頻率</span>
+            <input type="range" data-sfx="${id}-freq" style="width:70px;accent-color:var(--accent)" min="50" max="4000" value="${cur.freq}"
+              oninput="if(!DESIGN.sfx['${id}'])DESIGN.sfx['${id}']={};DESIGN.sfx['${id}'].freq=+this.value;this.nextElementSibling.textContent=this.value+'Hz'">
+            <span style="font-size:8px;color:var(--muted);min-width:38px">${cur.freq}Hz</span>
             <span style="font-size:9px;color:var(--muted)">音量</span>
-            <input type="range" style="width:50px;accent-color:var(--accent)" min="0.01" max="0.3" step="0.01" value="${cur.vol}" oninput="if(!DESIGN.sfx['${id}'])DESIGN.sfx['${id}']={...${JSON.stringify(defaults)}};DESIGN.sfx['${id}'].vol=+this.value">
-            <select style="background:rgba(0,0,0,.5);border:1px solid var(--border);color:var(--text);font-size:9px;border-radius:2px;padding:2px" onchange="if(!DESIGN.sfx['${id}'])DESIGN.sfx['${id}']={...${JSON.stringify(defaults)}};DESIGN.sfx['${id}'].type=this.value">
-              ${['square','sine','sawtooth','triangle'].map(t=>`<option ${cur.type===t?'selected':''}>${t}</option>`).join('')}
+            <input type="range" data-sfx="${id}-vol" style="width:55px;accent-color:var(--accent)" min="0.01" max="0.3" step="0.01" value="${cur.vol}"
+              oninput="if(!DESIGN.sfx['${id}'])DESIGN.sfx['${id}']={};DESIGN.sfx['${id}'].vol=+this.value;this.nextElementSibling.textContent=(+this.value).toFixed(2)">
+            <span style="font-size:8px;color:var(--muted);min-width:30px">${cur.vol.toFixed(2)}</span>
+            <span style="font-size:9px;color:var(--muted)">時長</span>
+            <input type="range" data-sfx="${id}-dur" style="width:55px;accent-color:var(--accent)" min="0.02" max="0.8" step="0.01" value="${cur.dur}"
+              oninput="if(!DESIGN.sfx['${id}'])DESIGN.sfx['${id}']={};DESIGN.sfx['${id}'].dur=+this.value;this.nextElementSibling.textContent=(+this.value).toFixed(2)+'s'">
+            <span style="font-size:8px;color:var(--muted);min-width:32px">${cur.dur.toFixed(2)}s</span>
+            <select data-sfx="${id}-type" style="background:rgba(0,0,0,.5);border:1px solid var(--border);color:var(--text);font-size:9px;border-radius:2px;padding:2px"
+              onchange="if(!DESIGN.sfx['${id}'])DESIGN.sfx['${id}']={};DESIGN.sfx['${id}'].type=this.value">
+              ${['square','sine','sawtooth','triangle'].map(t=>`<option value="${t}" ${cur.type===t?'selected':''}>${t}</option>`).join('')}
             </select>
-            <button class="sfx-play" onclick="SFX_PREVIEW.play('${id}')">▶</button>
+            <button class="sfx-play" onclick="SFX_PREVIEW.play('${id}')">▶ 試聽</button>
           </div>`;
       }).join('')}
     `;
@@ -898,7 +1153,7 @@ const TABS = {
   // ── 套用選擇 ──────────────────────────────────────────────────
   apply() {
     const a = DESIGN.server_assignments;
-    const items = [['patterns','彈幕 Pattern（Boss/小怪攻擊設計）'],['visuals','外觀設計（Boss/小怪/玩家形狀顏色）'],['weapons','武器管理（新增武器、刪除清單）'],['mechanics','玩家機制（HP、技能、移動）'],['abilities','敵人特殊能力（護盾/瞬移/分身）'],['balance','遊戲平衡（難度、掉落、商城）'],['world','地圖規則（POI 分類表、掃描設定）'],['lore','故事文案（名稱、台詞、標題）'],['sfx','音效設計'],['vfx','視覺特效'],['theme','HUD 主題配色']];
+    const items = [['patterns','彈幕 Pattern（Boss/小怪攻擊設計）'],['visuals','外觀設計（Boss/小怪/玩家形狀、子形狀）'],['weapons','武器管理（主武器/副武器）'],['mechanics','玩家數據（HP、攻擊、射速、移動）'],['abilities','敵人數據（名稱、護盾/瞬移/分身）'],['balance','遊戲平衡（難度、掉落、商城）'],['world','地圖規則（POI 分類表、掃描設定）'],['lore','故事文案（標題、小怪前綴）'],['sfx','音效設計'],['vfx','視覺特效'],['theme','HUD 主題配色']];
     return `
       <div class="section-title">🚀 套用至伺服器選擇</div>
       <div class="info-box">勾選要套用的設計模組。點「上傳到伺服器」會將勾選項傳送至 Flask，或使用「儲存設計」下載 JSON 手動放入 data/ 目錄後重啟伺服器。</div>
@@ -1030,6 +1285,72 @@ const TABS = {
       </div>
     `;
   },
+
+  // ── 奇物設計 ──────────────────────────────────────────────────
+  relic() {
+    if (!DESIGN.relics) DESIGN.relics = {};
+    const relics = DESIGN.relics;
+    const POS_PRESETS = [
+      { label:'左側 (-90°)', angle:-90, dist:28 },
+      { label:'右側 (+90°)', angle:90,  dist:28 },
+      { label:'後方 (180°)', angle:180, dist:20 },
+      { label:'前方 (0°)',   angle:0,   dist:20 },
+    ];
+    const cards = Object.entries(relics).map(([id, r]) => `
+      <div class="weapon-card" style="margin-bottom:8px">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:20px;color:${r.color||'#aaa'}">${r.icon||'◆'}</span>
+          <div style="flex:1">
+            <div style="font-size:11px;color:var(--text);letter-spacing:1px">${r.name||'未命名'}</div>
+            <div style="font-size:9px;color:var(--muted)">
+              ATK×${r.bonus?.atk_mult||1}　HP+${r.bonus?.max_hp_bonus||0}　射速×${r.bonus?.fire_rate_mult||1}
+              　掉落威脅≥${r.drop_threat_min||1}　機率${Math.round((r.drop_rate||0)*100)}%
+            </div>
+          </div>
+          <div style="display:flex;gap:4px">
+            <button class="ed-btn ed-btn-warn" style="font-size:8px;padding:3px 7px" onclick="ED.editRelic('${id}')">編輯</button>
+            <button class="ed-btn ed-btn-danger" style="font-size:8px;padding:3px 7px" onclick="ED.deleteRelic('${id}')">刪除</button>
+          </div>
+        </div>
+        <div id="relic-edit-${id}" style="display:none;border-top:1px solid var(--border);margin-top:8px;padding-top:8px">
+          <div class="form-row"><label class="form-label" style="min-width:80px">名稱</label>
+            <input class="form-input" value="${r.name||''}" oninput="DESIGN.relics['${id}'].name=this.value;APP.renderTab('relic')"></div>
+          <div class="form-row"><label class="form-label" style="min-width:80px">圖示</label>
+            <input class="form-input" value="${r.icon||'◆'}" style="width:50px;flex:none" oninput="DESIGN.relics['${id}'].icon=this.value;APP.renderTab('relic')">
+            <label class="form-label" style="min-width:40px;margin-left:10px">顏色</label>
+            <input type="color" class="form-input" value="${r.color||'#aaaaaa'}" oninput="DESIGN.relics['${id}'].color=this.value;APP.renderTab('relic')"></div>
+          <div class="form-row"><label class="form-label" style="min-width:80px">攻擊倍率</label>
+            <input type="range" class="form-input" min="1" max="3" step="0.05" value="${r.bonus?.atk_mult||1}"
+              oninput="if(!DESIGN.relics['${id}'].bonus)DESIGN.relics['${id}'].bonus={};DESIGN.relics['${id}'].bonus.atk_mult=+this.value;this.nextElementSibling.textContent='×'+this.value">
+            <span class="range-val">×${r.bonus?.atk_mult||1}</span></div>
+          <div class="form-row"><label class="form-label" style="min-width:80px">最大HP加成</label>
+            <input type="range" class="form-input" min="0" max="100" step="5" value="${r.bonus?.max_hp_bonus||0}"
+              oninput="if(!DESIGN.relics['${id}'].bonus)DESIGN.relics['${id}'].bonus={};DESIGN.relics['${id}'].bonus.max_hp_bonus=+this.value;this.nextElementSibling.textContent='+'+this.value">
+            <span class="range-val">+${r.bonus?.max_hp_bonus||0}</span></div>
+          <div class="form-row"><label class="form-label" style="min-width:80px">射速倍率</label>
+            <input type="range" class="form-input" min="0.5" max="1" step="0.05" value="${r.bonus?.fire_rate_mult||1}"
+              oninput="if(!DESIGN.relics['${id}'].bonus)DESIGN.relics['${id}'].bonus={};DESIGN.relics['${id}'].bonus.fire_rate_mult=+this.value;this.nextElementSibling.textContent='×'+this.value">
+            <span class="range-val">×${r.bonus?.fire_rate_mult||1}</span></div>
+          <div class="form-row"><label class="form-label" style="min-width:80px">掉落來源</label>
+            <select class="form-select" onchange="DESIGN.relics['${id}'].drop_threat_min=+this.value">
+              ${[1,2,3,4,5].map(t=>`<option value="${t}" ${(r.drop_threat_min||1)===t?'selected':''}>Boss 威脅≥${t}</option>`).join('')}
+            </select></div>
+          <div class="form-row"><label class="form-label" style="min-width:80px">掉落機率</label>
+            <input type="range" class="form-input" min="0.05" max="1" step="0.05" value="${r.drop_rate||0.3}"
+              oninput="DESIGN.relics['${id}'].drop_rate=+this.value;this.nextElementSibling.textContent=Math.round(this.value*100)+'%'">
+            <span class="range-val">${Math.round((r.drop_rate||0.3)*100)}%</span></div>
+        </div>
+      </div>`).join('');
+
+    return `
+      <div class="section-title">◉ 奇物設計</div>
+      <div class="info-box">設計 Boss 戰後可掉落的奇物，提供被動加成（攻擊倍率 / 最大 HP / 射速倍率）。掉落機率以 Boss 威脅等級篩選。</div>
+      <div style="margin-bottom:10px">
+        <button class="ed-btn ed-btn-accent" onclick="ED.addRelic()">+ 新增奇物</button>
+      </div>
+      ${cards || '<div style="color:var(--muted);text-align:center;padding:20px;font-size:10px">尚無奇物定義</div>'}
+    `;
+  },
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -1046,11 +1367,11 @@ const ED = {
     const lastPhase = arr.length ? arr[arr.length-1].phase : 0;
     arr.push({ phase:lastPhase+1, type:'radial', count:8, speed:3.0, hp_threshold: Math.max(0.1, 0.5 - arr.length*0.1), fire_interval:40, damage:10, r:6, color:'#ff1a6e', maxLife:260, trajectory:'straight' });
     DESIGN.patterns[key] = arr;
-    APP.renderTab('pattern');
+    APP.renderTab('enemy_data');
   },
   removePhase(key, idx) {
     DESIGN.patterns[key].splice(idx, 1);
-    APP.renderTab('pattern');
+    APP.renderTab('enemy_data');
   },
   setVisualBoss(t, field, val) { if(!DESIGN.visuals.boss[t])DESIGN.visuals.boss[t]={}; DESIGN.visuals.boss[t][field]=val; PREVIEW.restart(); },
   setVisualMob(t, field, val)  { if(!DESIGN.visuals.mob[t]) DESIGN.visuals.mob[t]={};  DESIGN.visuals.mob[t][field]=val;  PREVIEW.restart(); },
@@ -1061,7 +1382,7 @@ const ED = {
     if (!section[t]) section[t]={};
     if (!section[t][ability]) section[t][ability]={};
     section[t][ability][field]=val;
-    APP.renderTab('abilities');
+    APP.renderTab('enemy_data');
   },
   addWeapon() {
     const id = 'custom_' + Date.now();
@@ -1093,6 +1414,15 @@ const ED = {
     w.bullet_r         = +(get('we-br')?.value)   || w.bullet_r;
     w.bullet_trail_mult= +(get('we-trail')?.value)|| w.bullet_trail_mult;
     w.pattern          = get('we-pattern')?.value || w.pattern;
+    w.type             = get('we-type')?.value    || w.type || 'main';
+    if (w.type === 'sub') {
+      const posType = get('we-pos-type')?.value || 'angle';
+      const angle   = +(get('we-pos-angle')?.value || 90);
+      const dist    = +(get('we-pos-dist')?.value  || 25);
+      w.sub_position = { type: posType, angle, dist };
+    } else {
+      delete w.sub_position;
+    }
     ED._editingWeaponId = null;
     APP.renderTab('weapon');
     APP.status(`✓ ${w.name} 已儲存`);
@@ -1107,9 +1437,45 @@ const ED = {
     else delete DESIGN.weapons[id];          // 自訂武器直接移除
     APP.renderTab('weapon');
   },
+  addCustomPoi(type) {
+    if(!DESIGN.custom_pois)DESIGN.custom_pois=[];
+    const allOfType=[...DEV_POIS,...DESIGN.custom_pois].filter(p=>p.type===type);
+    const newPoi={id:'custom_'+Date.now(),lat:24.798,lng:120.996,
+      name:type==='mob'?`自訂小怪 ${allOfType.length+1}`:`自訂 Boss ${allOfType.length+1}`,
+      type,threat:Math.min(5,allOfType.length+1),mob_count:3};
+    DESIGN.custom_pois.push(newPoi);
+    currentEnemyExpanded=newPoi.id;
+    APP.renderTab('enemy_data');
+  },
+  removeCustomPoi(id) {
+    DESIGN.custom_pois=(DESIGN.custom_pois||[]).filter(p=>p.id!==id);
+    if(currentEnemyExpanded===id)currentEnemyExpanded=null;
+    APP.renderTab('enemy_data');
+  },
   addPOICategory() {
     DESIGN.world.poi_categories.push({tag:'amenity=new_tag',label:'新地點',type:'mob',threat:1});
     APP.renderTab('world');
+  },
+
+  // ── 奇物 ──────────────────────────────────────────────────────
+  _editingRelicId: null,
+  addRelic() {
+    const id = 'relic_' + Date.now();
+    if (!DESIGN.relics) DESIGN.relics = {};
+    DESIGN.relics[id] = { name:'新奇物', icon:'◆', color:'#aa44ff',
+      bonus:{ atk_mult:1, max_hp_bonus:0, fire_rate_mult:1 },
+      drop_threat_min:3, drop_rate:0.3 };
+    ED._editingRelicId = id;
+    APP.renderTab('relic');
+  },
+  editRelic(id) {
+    ED._editingRelicId = (ED._editingRelicId === id) ? null : id;
+    const el = document.getElementById('relic-edit-' + id);
+    if (el) el.style.display = el.style.display === 'none' ? '' : 'none';
+  },
+  deleteRelic(id) {
+    delete DESIGN.relics[id];
+    APP.renderTab('relic');
   },
 };
 
@@ -1120,6 +1486,12 @@ const SFX_PREVIEW = {
   ctx: null,
   play(id) {
     if (!this.ctx) this.ctx = new (window.AudioContext||window.webkitAudioContext)();
+    if (this.ctx.state === 'suspended') this.ctx.resume();
+    // 直接從 DOM 讀取目前滑桿值，確保反映最新調整
+    const freqEl = document.querySelector(`[data-sfx="${id}-freq"]`);
+    const volEl  = document.querySelector(`[data-sfx="${id}-vol"]`);
+    const typeEl = document.querySelector(`[data-sfx="${id}-type"]`);
+    const dur2El = document.querySelector(`[data-sfx="${id}-dur"]`);
     const DEFAULTS = {
       shoot_single:  {freq:1200,freq2:800, dur:0.06,type:'square',  vol:0.04},
       shoot_seeker:  {freq:900, freq2:1100,dur:0.08,type:'sine',     vol:0.05},
@@ -1129,17 +1501,21 @@ const SFX_PREVIEW = {
       victory_note1: {freq:523, freq2:523, dur:0.18,type:'square',   vol:0.08},
       defeat_note1:  {freq:400, freq2:280, dur:0.22,type:'sawtooth', vol:0.07},
     };
-    const d = {...(DEFAULTS[id]||DEFAULTS.shoot_single), ...(DESIGN.sfx[id]||{})};
+    const def = DEFAULTS[id] || DEFAULTS.shoot_single;
+    const freq = freqEl ? +freqEl.value : def.freq;
+    const vol  = volEl  ? +volEl.value  : def.vol;
+    const type = typeEl ? typeEl.value  : def.type;
+    const dur  = dur2El ? +dur2El.value : def.dur;
+    const freq2 = def.freq2;
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
     osc.connect(gain); gain.connect(this.ctx.destination);
-    osc.type = d.type;
-    osc.frequency.setValueAtTime(d.freq||500, this.ctx.currentTime);
-    if (d.freq2) osc.frequency.linearRampToValueAtTime(d.freq2, this.ctx.currentTime + (d.dur||0.1));
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+    if (freq2) osc.frequency.linearRampToValueAtTime(freq2, this.ctx.currentTime + dur);
     const t = this.ctx.currentTime;
-    const dur = d.dur || 0.1;
     gain.gain.setValueAtTime(0, t);
-    gain.gain.linearRampToValueAtTime(d.vol||0.08, t + 0.005);
+    gain.gain.linearRampToValueAtTime(vol, t + 0.005);
     gain.gain.linearRampToValueAtTime(0, t + dur);
     osc.start(t); osc.stop(t + dur + 0.02);
   },
@@ -1158,10 +1534,18 @@ const PREVIEW = {
 
   // 玩家 HP 系統
   playerHp: 100, playerMaxHp: 100, playerInvFrames: 0,
-  damageNumbers: [],   // {x, y, val, life, maxLife}
+  damageNumbers: [],
 
-  // 強制 Phase（-1 = 自動依 HP，>= 1 = 強制指定）
+  // 玩家射擊
+  playerBullets: [], playerShootTimer: 0, mouseDown: false,
+
+  // 方向箭頭拖移
+  _arrowDrag: false, _arrowDragPhase: null, _arrowDragKey: null,
+
+  // 強制 Phase
   forcedPhase: -1,
+  // 武器預覽
+  activeWeaponId: 'pulse_gun',
 
   init() {
     this.canvas = document.getElementById('preview-canvas');
@@ -1170,9 +1554,29 @@ const PREVIEW = {
     window.addEventListener('resize', () => this._resize());
     this.canvas.addEventListener('mousemove', e => {
       const r = this.canvas.getBoundingClientRect();
-      this.mouseX  = e.clientX - r.left;
-      this.mouseY  = e.clientY - r.top;   // 修復：同步 Y 軸
+      this.mouseX = e.clientX - r.left;
+      this.mouseY = e.clientY - r.top;
+      if (this._arrowDrag && this._arrowDragPhase) {
+        // 計算拖移角度 → dir_offset（相對於發射原點）
+        const ox = this._arrowOriginX, oy = this._arrowOriginY;
+        const angle = Math.atan2(this.mouseY - oy, this.mouseX - ox);
+        const deg = Math.round(angle * 180 / Math.PI);
+        this._arrowDragPhase.dir_offset = deg;
+        APP.renderTab('enemy_data');
+      }
     });
+    this.canvas.addEventListener('mousedown', e => {
+      const r = this.canvas.getBoundingClientRect();
+      const mx = e.clientX - r.left, my = e.clientY - r.top;
+      // 檢查是否點在方向箭頭尖端附近
+      if (this._arrowTipX !== undefined) {
+        const dx = mx - this._arrowTipX, dy = my - this._arrowTipY;
+        if (dx*dx + dy*dy < 400) { this._arrowDrag = true; return; }
+      }
+      this.mouseDown = true;
+    });
+    this.canvas.addEventListener('mouseup',    () => { this.mouseDown = false; this._arrowDrag = false; });
+    this.canvas.addEventListener('mouseleave', () => { this.mouseDown = false; this._arrowDrag = false; });
   },
 
   _resize() {
@@ -1202,14 +1606,15 @@ const PREVIEW = {
     this.bossY = 70;
     this.wobbleT = 0; this.bossAngle = 0; this.spiralAngle = 0;
     this.shootTimer = 0; this.phaseIdx = 0;
-    this.bullets = [];
+    this.bullets = []; this.playerBullets = []; this.playerShootTimer = 0;
     this.playerHp = this.playerMaxHp = DESIGN.mechanics?.player?.max_hp || 100;
     this.playerInvFrames = 0;
     this.damageNumbers = [];
     this.forcedPhase = -1;
+    this._arrowDrag = false; this._arrowDragPhase = null;
     // 初始化小怪列表（mob 模式）
     if (poi.type === 'mob') {
-      const count = poi.mob_count || 3;
+      const count = (DESIGN.mob_counts?.[poi.threat]) ?? poi.mob_count ?? 3;
       const cw = this.canvas.width;
       this.mobList = Array.from({length: count}, (_, i) => ({
         id: i,
@@ -1270,8 +1675,28 @@ const PREVIEW = {
     APP.status(n === -1 ? '預覽模式：自動（依 HP）' : `強制預覽 Phase ${n}`);
   },
 
+  _getLaunchOrigin(p) {
+    const cw = this.canvas.width, ch = this.canvas.height;
+    switch(p.launch_source || 'monster') {
+      case 'top':    return { x: this.bossX + (Math.random()-.5)*cw*.6, y: 0 };
+      case 'bottom': return { x: this.bossX + (Math.random()-.5)*cw*.6, y: ch };
+      case 'left':   return { x: 0,  y: ch * (.2 + Math.random()*.5) };
+      case 'right':  return { x: cw, y: ch * (.2 + Math.random()*.5) };
+      case 'fixed':  return { x: p.fixed_x || cw/2, y: p.fixed_y || 80 };
+      default: {
+        if (this.poi?.type === 'mob' && this.mobList.length > 0) {
+          const live = this.mobList.filter(m => !m.dead);
+          if (live.length) { const m = live[Math.floor(Math.random()*live.length)]; return {x:m.x, y:m.y}; }
+        }
+        return { x: this.bossX, y: this.bossY };
+      }
+    }
+  },
+
   _spawnBullets(p) {
-    const bx = this.bossX, by = this.bossY;
+    const origin = this._getLaunchOrigin(p);
+    const bx = origin.x, by = origin.y;
+    const dirRad = ((p.dir_offset || 0) * Math.PI / 180);
     const spdMult = DESIGN.balance?.difficulty?.enemy_speed_mult || 1.0;
     const dmgMult = DESIGN.balance?.difficulty?.enemy_damage_mult || 1.0;
     const spd = p.speed * spdMult;
@@ -1279,14 +1704,16 @@ const PREVIEW = {
     const col = p.color || '#ff1a6e';
     const r   = p.r || 6;
     const traj = p.trajectory || 'straight';
+    const bend = p.curve_bend ?? 0.03;
 
+    const mk = (ax,ay,vx,vy,rc,cl,ml,tr) => this.bullets.push({x:ax,y:ay,vx,vy,r:rc,color:cl,life:0,maxLife:ml,damage:dmg,traj:tr,bend,gravity:p.gravity||0.08,bounce:0,maxBounce:2});
     switch(p.type) {
-      case 'radial': for(let i=0;i<p.count;i++){const a=(Math.PI*2/p.count)*i+this.bossAngle;this.bullets.push({x:bx,y:by,vx:Math.cos(a)*spd,vy:Math.sin(a)*spd,r,color:col,life:0,maxLife:p.maxLife||260,damage:dmg,traj,gravity:p.gravity||0.08,bounce:0,maxBounce:2});}; this.bossAngle+=0.22; break;
-      case 'spiral': for(let a=0;a<(p.count||3);a++){const angle=this.spiralAngle+(Math.PI*2/(p.count||3))*a;this.bullets.push({x:bx,y:by,vx:Math.cos(angle)*spd,vy:Math.sin(angle)*spd,r:r-1,color:'#ff6600',life:0,maxLife:p.maxLife||320,damage:dmg,traj,gravity:p.gravity||0.08,bounce:0,maxBounce:2});}; this.spiralAngle+=0.14; break;
-      case 'aimed': {const dx=this.playerX-bx,dy=this.playerY-by,base=Math.atan2(dy,dx),spread=0.22;for(let i=0;i<p.count;i++){const a=base+(i-(p.count-1)/2)*spread;this.bullets.push({x:bx,y:by,vx:Math.cos(a)*spd,vy:Math.sin(a)*spd,r:r+1,color:'#ffaa00',life:0,maxLife:p.maxLife||320,damage:dmg,traj,gravity:p.gravity||0.08,bounce:0,maxBounce:2});} break;}
-      case 'wave': for(let i=0;i<p.count;i++){const wx=(this.canvas.width/p.count)*i+this.canvas.width/p.count/2;this.bullets.push({x:wx,y:by+30,vx:(Math.random()-.5)*1.2,vy:spd*(0.8+Math.random()*.4),r,color:'#aa00ff',life:0,maxLife:p.maxLife||350,damage:dmg,traj:'straight',bounce:0,maxBounce:0});} break;
+      case 'radial': for(let i=0;i<p.count;i++){const a=(Math.PI*2/p.count)*i+this.bossAngle+dirRad;mk(bx,by,Math.cos(a)*spd,Math.sin(a)*spd,r,col,p.maxLife||260,traj);}; this.bossAngle+=0.22; break;
+      case 'spiral': for(let a=0;a<(p.count||3);a++){const angle=this.spiralAngle+(Math.PI*2/(p.count||3))*a+dirRad;mk(bx,by,Math.cos(angle)*spd,Math.sin(angle)*spd,r-1,'#ff6600',p.maxLife||320,traj);}; this.spiralAngle+=0.14; break;
+      case 'aimed': {const dx=this.playerX-bx,dy=this.playerY-by,base=Math.atan2(dy,dx)+dirRad,spread=0.22;for(let i=0;i<p.count;i++){const a=base+(i-(p.count-1)/2)*spread;mk(bx,by,Math.cos(a)*spd,Math.sin(a)*spd,r+1,'#ffaa00',p.maxLife||320,traj);} break;}
+      case 'wave': for(let i=0;i<p.count;i++){const wx=(this.canvas.width/p.count)*i+this.canvas.width/p.count/2;mk(wx,by+30,(Math.random()-.5)*1.2,spd*(0.8+Math.random()*.4),r,'#aa00ff',p.maxLife||350,'straight');} break;
       case 'chaos': {const roll=Math.random();const cp={...p,type:roll<0.33?'radial':roll<0.66?'spiral':'aimed'};this._spawnBullets(cp);return;}
-      case 'parabola': for(let i=0;i<p.count;i++){const a=(Math.PI*2/p.count)*i+this.bossAngle;this.bullets.push({x:bx,y:by,vx:Math.cos(a)*spd,vy:Math.sin(a)*spd,r,color:col,life:0,maxLife:p.maxLife||400,damage:dmg,traj:'parabola',gravity:p.gravity||0.08,bounce:0,maxBounce:2});} this.bossAngle+=0.22; break;
+      default: for(let i=0;i<p.count;i++){const a=(Math.PI*2/p.count)*i+this.bossAngle+dirRad;mk(bx,by,Math.cos(a)*spd,Math.sin(a)*spd,r,col,p.maxLife||400,traj);} this.bossAngle+=0.22; break;
     }
   },
 
@@ -1358,7 +1785,7 @@ const PREVIEW = {
     this.bullets = this.bullets.filter(b => {
       b.life++;
       if (b.traj === 'parabola') b.vy += (b.gravity || 0.08);
-      if (b.traj === 'curve') { const angle = Math.atan2(b.vy,b.vx) + 0.03; const spd=Math.sqrt(b.vx*b.vx+b.vy*b.vy); b.vx=Math.cos(angle)*spd; b.vy=Math.sin(angle)*spd; }
+      if (b.traj === 'curve') { const angle = Math.atan2(b.vy,b.vx) + (b.bend??0.03); const spd=Math.sqrt(b.vx*b.vx+b.vy*b.vy); b.vx=Math.cos(angle)*spd; b.vy=Math.sin(angle)*spd; }
       if (b.traj === 'homing') { const dx=this.playerX-b.x,dy=this.playerY-b.y,dist=Math.sqrt(dx*dx+dy*dy); if(dist>0){b.vx+=(dx/dist)*.3;b.vy+=(dy/dist)*.3;const spd=Math.sqrt(b.vx*b.vx+b.vy*b.vy);if(spd>8){b.vx=b.vx/spd*8;b.vy=b.vy/spd*8;}} }
       if (b.traj === 'bounce') {
         if ((b.x<0 && b.vx<0)||(b.x>cw && b.vx>0)) { b.vx=-b.vx; b.bounce++; }
@@ -1448,6 +1875,19 @@ const PREVIEW = {
         this.ctx.fillStyle = `hsl(40,100%,60%)`; this.ctx.shadowBlur = 8; this.ctx.shadowColor = col;
         this.ctx.beginPath(); this.ctx.arc(m.x, m.y, r*.35, 0, Math.PI*2); this.ctx.fill();
         this.ctx.restore();
+        // 子形狀
+        (mv.sub_shapes||[]).forEach(ss => {
+          const sx = m.x + (ss.offset_x||0), sy = m.y + (ss.offset_y||0);
+          const sr = r * (ss.size_mult||0.4);
+          const sc2 = ss.color || col;
+          this.ctx.save();
+          this.ctx.shadowBlur = ss.glow_intensity||16; this.ctx.shadowColor = sc2;
+          this.ctx.fillStyle = sc2; this.ctx.beginPath();
+          const ssShape = ss.shape || 'circle';
+          if (ssShape==='circle') { this.ctx.arc(sx,sy,sr,0,Math.PI*2); }
+          else { const sides={pentagon:5,hexagon:6,square:4,triangle:3,star:10,diamond:4}[ssShape]||4; for(let i=0;i<sides;i++){const a=(Math.PI*2/sides)*i-Math.PI/2;i===0?this.ctx.moveTo(sx+Math.cos(a)*sr,sy+Math.sin(a)*sr):this.ctx.lineTo(sx+Math.cos(a)*sr,sy+Math.sin(a)*sr);} }
+          this.ctx.closePath(); this.ctx.fill(); this.ctx.restore();
+        });
       });
       // 計數 HUD
       const alive = this.mobList.filter(m => !m.dead).length;
@@ -1497,6 +1937,27 @@ const PREVIEW = {
         this.ctx.rect(this.bossX-r, this.bossY-arm, r*2, arm*2);
       }
       this.ctx.closePath(); this.ctx.fill();
+      // 子形狀
+      (bv.sub_shapes||[]).forEach(ss => {
+        const sx = this.bossX + (ss.offset_x||0), sy = this.bossY + (ss.offset_y||0);
+        const sr = r * (ss.size_mult||0.5);
+        const sc2 = ss.color || col;
+        this.ctx.save();
+        this.ctx.shadowBlur = ss.glow_intensity||20; this.ctx.shadowColor = sc2;
+        this.ctx.fillStyle = sc2;
+        this.ctx.beginPath();
+        const ssShape = ss.shape || 'circle';
+        if (ssShape==='circle') { this.ctx.arc(sx, sy, sr, 0, Math.PI*2); }
+        else if (ssShape==='diamond') { this.ctx.moveTo(sx,sy-sr);this.ctx.lineTo(sx+sr*.65,sy);this.ctx.lineTo(sx,sy+sr);this.ctx.lineTo(sx-sr*.65,sy); }
+        else { const sides={pentagon:5,hexagon:6,square:4,triangle:3,star:10,cross:4}[ssShape]||5; for(let i=0;i<sides;i++){const a=(Math.PI*2/sides)*i-Math.PI/2;i===0?this.ctx.moveTo(sx+Math.cos(a)*sr,sy+Math.sin(a)*sr):this.ctx.lineTo(sx+Math.cos(a)*sr,sy+Math.sin(a)*sr);} }
+        this.ctx.closePath(); this.ctx.fill();
+        // 輻條
+        if ((ss.spoke_count||0) > 0) {
+          this.ctx.strokeStyle = sc2; this.ctx.lineWidth = 1.5;
+          for(let i=0;i<ss.spoke_count;i++){const a=(Math.PI*2/ss.spoke_count)*i;this.ctx.beginPath();this.ctx.moveTo(sx+Math.cos(a)*(sr+4),sy+Math.sin(a)*(sr+4));this.ctx.lineTo(sx+Math.cos(a)*(sr+14),sy+Math.sin(a)*(sr+14));this.ctx.stroke();}
+        }
+        this.ctx.restore();
+      });
       // 核心
       const ic = `hsl(${hpRatio*120},100%,55%)`;
       this.ctx.fillStyle = ic; this.ctx.shadowBlur=20; this.ctx.shadowColor=ic;
@@ -1541,6 +2002,95 @@ const PREVIEW = {
       this.ctx.restore();
     }
 
+    // ── 玩家射擊（使用選中武器屬性）─────────────────────────────
+    const _wpn = DESIGN.weapons?.[this.activeWeaponId] || DESIGN.weapons?.['pulse_gun'] || {};
+    const pFireRate = _wpn.fire_rate ?? DESIGN.mechanics?.player?.fire_rate ?? 7;
+    const pAtk = (DESIGN.mechanics?.player?.base_atk || 12);
+    const pBulletSpd = 12 * (DESIGN.mechanics?.player?.bullet_speed_mult || 1.0);
+    const pBColor = _wpn.color || '#00f0ff';
+    const pBR = _wpn.bullet_r || 4;
+    if (this.mouseDown) {
+      this.playerShootTimer++;
+      if (this.playerShootTimer >= pFireRate) {
+        this.playerShootTimer = 0;
+        this.playerBullets.push({ x: this.playerX, y: this.playerY - 16, vx: 0, vy: -pBulletSpd, r: pBR, color: pBColor, damage: pAtk, life: 0, maxLife: 120 });
+      }
+    }
+    // 更新玩家子彈 + 碰撞 boss/mob
+    this.playerBullets = this.playerBullets.filter(pb => {
+      pb.x += pb.vx; pb.y += pb.vy; pb.life++;
+      if (pb.life >= pb.maxLife || pb.y < -20) return false;
+      // 碰撞 Boss
+      if (this.poi?.type === 'boss' && this.bossHp > 0) {
+        const bossR = (28 + (this.poi.threat||1)*7) * (DESIGN.visuals?.boss?.[this.poi.threat]?.size_multiplier||1);
+        const dx = pb.x - this.bossX, dy = pb.y - this.bossY;
+        if (dx*dx + dy*dy < (bossR + pb.r)**2) {
+          this.bossHp = Math.max(0, this.bossHp - pb.damage);
+          this.damageNumbers.push({ x: this.bossX + (Math.random()-.5)*30, y: this.bossY - 20, val: pb.damage, life: 0, maxLife: 40 });
+          document.getElementById('pv-hp').textContent = `Boss HP: ${Math.round(this.bossHp)}/${this.bossMaxHp}`;
+          return false;
+        }
+      }
+      // 碰撞小怪
+      if (this.poi?.type === 'mob') {
+        for (const m of this.mobList) {
+          if (m.dead) continue;
+          const t = this.poi.threat;
+          const mr = (10 + t*3) * (DESIGN.visuals?.mob?.[t]?.size_multiplier||1);
+          const dx = pb.x - m.x, dy = pb.y - m.y;
+          if (dx*dx + dy*dy < (mr + pb.r)**2) {
+            m.dead = true;
+            this.damageNumbers.push({ x: m.x, y: m.y - 16, val: pb.damage, life: 0, maxLife: 40 });
+            return false;
+          }
+        }
+      }
+      // 渲染玩家子彈
+      this.ctx.save();
+      const _pc = pb.color || '#00f0ff';
+      this.ctx.shadowBlur = 10; this.ctx.shadowColor = _pc;
+      this.ctx.fillStyle = _pc;
+      this.ctx.beginPath(); this.ctx.arc(pb.x, pb.y, pb.r, 0, Math.PI*2); this.ctx.fill();
+      this.ctx.restore();
+      return true;
+    });
+
+    // ── 方向箭頭（pattern tab 時顯示）───────────────────────
+    if (currentTab === 'enemy_data') {
+      const curP = this._getCurrentPattern();
+      if (curP) {
+        const origin = this._getLaunchOrigin(curP);
+        const ox = origin.x, oy = origin.y;
+        const dirRad = ((curP.dir_offset||0) + 270) * Math.PI / 180; // 預設向上
+        const arrowLen = 50;
+        const tipX = ox + Math.cos(dirRad) * arrowLen;
+        const tipY = oy + Math.sin(dirRad) * arrowLen;
+        this._arrowTipX = tipX; this._arrowTipY = tipY;
+        this._arrowOriginX = ox; this._arrowOriginY = oy;
+        this._arrowDragPhase = curP;
+        // 預覽射擊路線（虛線）
+        this.ctx.save();
+        this.ctx.setLineDash([4,4]); this.ctx.strokeStyle = 'rgba(255,200,0,.5)'; this.ctx.lineWidth = 1;
+        this.ctx.beginPath(); this.ctx.moveTo(ox, oy);
+        this.ctx.lineTo(ox + Math.cos(dirRad)*120, oy + Math.sin(dirRad)*120);
+        this.ctx.stroke();
+        this.ctx.setLineDash([]);
+        // 箭頭
+        this.ctx.strokeStyle = '#ffcc00'; this.ctx.lineWidth = 2;
+        this.ctx.shadowBlur = 8; this.ctx.shadowColor = '#ffcc00';
+        this.ctx.beginPath(); this.ctx.moveTo(ox, oy); this.ctx.lineTo(tipX, tipY); this.ctx.stroke();
+        const headA = Math.atan2(tipY - oy, tipX - ox);
+        this.ctx.beginPath();
+        this.ctx.moveTo(tipX, tipY);
+        this.ctx.lineTo(tipX - Math.cos(headA - 0.4)*12, tipY - Math.sin(headA - 0.4)*12);
+        this.ctx.lineTo(tipX - Math.cos(headA + 0.4)*12, tipY - Math.sin(headA + 0.4)*12);
+        this.ctx.closePath(); this.ctx.fillStyle = '#ffcc00'; this.ctx.fill();
+        this.ctx.fillStyle = 'rgba(255,200,0,.8)'; this.ctx.font = '9px monospace';
+        this.ctx.fillText(`${curP.dir_offset||0}°  拖移箭頭調整角度`, ox + 4, oy - 8);
+        this.ctx.restore();
+      }
+    }
+
     // ── 玩家 HP 條 ───────────────────────────────────────────
     const phRatio = this.playerHp / this.playerMaxHp;
     this.ctx.fillStyle = 'rgba(0,0,0,.7)';
@@ -1558,11 +2108,13 @@ const PREVIEW = {
       const t = 1 - dn.life / dn.maxLife;
       this.ctx.save();
       this.ctx.globalAlpha = t;
-      this.ctx.shadowBlur = 6; this.ctx.shadowColor = '#ff3a3a';
-      this.ctx.fillStyle = '#ff3a3a';
+      const isRevive = typeof dn.val !== 'number';
+      const dnColor = isRevive ? '#00ff88' : '#ff3a3a';
+      this.ctx.shadowBlur = 6; this.ctx.shadowColor = dnColor;
+      this.ctx.fillStyle = dnColor;
       this.ctx.font = `bold ${10 + Math.round((1-t)*4)}px monospace`;
       this.ctx.textAlign = 'center';
-      this.ctx.fillText(`-${dn.val}`, dn.x, dn.y - dn.life * 0.5);
+      this.ctx.fillText(isRevive ? String(dn.val) : `-${dn.val}`, dn.x, dn.y - dn.life * 0.5);
       this.ctx.restore();
       dn.life++;
     }
@@ -1576,34 +2128,30 @@ const PREVIEW = {
         ? `Boss HP: ${Math.round(this.bossHp)}/${this.bossMaxHp}`
         : `小怪: ${this.mobList.filter(m=>!m.dead).length}/${this.mobList.length}`;
 
-    // ── 勝負判定 + 結算畫面 ──────────────────────────────────
+    // ── 勝負判定 ────────────────────────────────────────────
     const bossDefeated = this.poi?.type === 'boss' && this.bossHp <= 0;
     const mobsDefeated = this.poi?.type === 'mob'  && this.mobList.length > 0 && this.mobList.every(m => m.dead);
-    const playerDead   = this.playerHp <= 0;
-
-    if (bossDefeated || mobsDefeated || playerDead) {
-      const won = bossDefeated || mobsDefeated;
-      this.ctx.fillStyle = 'rgba(0,0,0,.78)';
+    if (bossDefeated || mobsDefeated) {
+      this.ctx.fillStyle = 'rgba(0,0,0,.7)';
       this.ctx.fillRect(0, 0, cw, ch);
       this.ctx.textAlign = 'center';
-      this.ctx.shadowBlur = 24;
-      this.ctx.shadowColor = won ? '#00ff88' : '#ff3a3a';
-      this.ctx.fillStyle   = won ? '#00ff88' : '#ff3a3a';
-      this.ctx.font = 'bold 30px monospace';
-      this.ctx.fillText(won ? '✓ 擊敗！' : '✗ 玩家陣亡', cw/2, ch/2 - 20);
-      this.ctx.shadowBlur = 0;
-      this.ctx.fillStyle = 'rgba(180,200,220,.7)';
+      this.ctx.shadowBlur = 24; this.ctx.shadowColor = '#00ff88';
+      this.ctx.fillStyle = '#00ff88'; this.ctx.font = 'bold 28px monospace';
+      this.ctx.fillText('✓ 擊敗！', cw/2, ch/2 - 10);
+      this.ctx.shadowBlur = 0; this.ctx.fillStyle = 'rgba(180,200,220,.7)';
       this.ctx.font = '11px monospace';
-      this.ctx.fillText('3 秒後自動重新開始...', cw/2, ch/2 + 14);
+      this.ctx.fillText('3 秒後重新開始...', cw/2, ch/2 + 16);
       this.ctx.textAlign = 'left';
-
       if (!this._endScheduled) {
         this._endScheduled = true;
-        setTimeout(() => {
-          this._endScheduled = false;
-          this.loadPoi(this.poi);   // 重新載入同一地點
-        }, 3000);
+        setTimeout(() => { this._endScheduled = false; this.loadPoi(this.poi); }, 3000);
       }
+    }
+    // 玩家 HP ≤ 0 → 自動復活，不跳死亡畫面
+    if (this.playerHp <= 0) {
+      this.playerHp = this.playerMaxHp;
+      this.playerInvFrames = DESIGN.mechanics?.player?.inv_frames || 90;
+      this.damageNumbers.push({ x: this.playerX, y: this.playerY - 30, val: '復活', life: 0, maxLife: 60 });
     }
 
     this.animId = requestAnimationFrame(() => this._loop());
