@@ -6,10 +6,6 @@
 const THREAT_LABELS = ["", "低", "低", "中", "高", "極危"];
 const THREAT_COLORS = ["", "#00ff88", "#00ff88", "#ffaa00", "#ff6b35", "#ff1a6e"];
 
-// 從自訂文案讀取名稱（若有）
-function _getBossNames() { return window._CUSTOM_LORE?.boss_names || ["異變核心","污染體·巨型","腐敗領主","混沌守衛","深淵君主","終焉使者","虛空支配者","災厄根源"]; }
-function _getMobPrefixes() { return window._CUSTOM_LORE?.mob_prefixes || ["污染體","異變體","腐化生物","感染者","潛伏者"]; }
-function _pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
 const INIT_LAT = 24.797590;
 const INIT_LNG = 120.995540;

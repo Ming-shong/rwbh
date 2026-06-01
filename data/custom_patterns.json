@@ -1,3 +1,215 @@
 {
-  "test": true
+  "threat_1": [
+    {
+      "phase": 1,
+      "type": "radial",
+      "count": 12,
+      "speed": 4,
+      "hp_threshold": 1,
+      "fire_interval": 60,
+      "damage": 10,
+      "r": 16,
+      "color": "#ff1a6e",
+      "maxLife": 260,
+      "trajectory": "straight"
+    }
+  ],
+  "threat_2": [
+    {
+      "phase": 1,
+      "type": "radial",
+      "count": 8,
+      "speed": 3,
+      "hp_threshold": 1,
+      "fire_interval": 55,
+      "damage": 10,
+      "r": 6,
+      "color": "#ff1a6e",
+      "maxLife": 260,
+      "trajectory": "straight"
+    },
+    {
+      "phase": 2,
+      "type": "aimed",
+      "count": 3,
+      "speed": 4.5,
+      "hp_threshold": 0.5,
+      "fire_interval": 40,
+      "damage": 16,
+      "r": 7,
+      "color": "#ffaa00",
+      "maxLife": 320,
+      "trajectory": "straight"
+    }
+  ],
+  "threat_3": [
+    {
+      "phase": 1,
+      "type": "radial",
+      "count": 6,
+      "speed": 3,
+      "hp_threshold": 1,
+      "fire_interval": 50,
+      "damage": 10,
+      "r": 5,
+      "color": "#ff1a6e",
+      "maxLife": 260,
+      "trajectory": "straight"
+    },
+    {
+      "phase": 2,
+      "type": "radial",
+      "count": 3,
+      "speed": 4,
+      "hp_threshold": 0.6,
+      "fire_interval": 21,
+      "damage": 8,
+      "r": 8,
+      "color": "#ff6600",
+      "maxLife": 320,
+      "trajectory": "straight"
+    },
+    {
+      "phase": 3,
+      "type": "aimed",
+      "count": 4,
+      "speed": 5.5,
+      "hp_threshold": 0.3,
+      "fire_interval": 30,
+      "damage": 16,
+      "r": 7,
+      "color": "#ffaa00",
+      "maxLife": 320,
+      "trajectory": "straight"
+    }
+  ],
+  "threat_4": [
+    {
+      "phase": 1,
+      "type": "radial",
+      "count": 12,
+      "speed": 3.5,
+      "hp_threshold": 1,
+      "fire_interval": 45,
+      "damage": 10,
+      "r": 6,
+      "color": "#ff1a6e",
+      "maxLife": 260,
+      "trajectory": "straight"
+    },
+    {
+      "phase": 2,
+      "type": "spiral",
+      "count": 4,
+      "speed": 5,
+      "hp_threshold": 0.7,
+      "fire_interval": 32,
+      "damage": 8,
+      "r": 5,
+      "color": "#ff6600",
+      "maxLife": 320,
+      "trajectory": "straight"
+    },
+    {
+      "phase": 3,
+      "type": "aimed",
+      "count": 5,
+      "speed": 6.5,
+      "hp_threshold": 0.4,
+      "fire_interval": 28,
+      "damage": 16,
+      "r": 7,
+      "color": "#ffaa00",
+      "maxLife": 320,
+      "trajectory": "straight"
+    },
+    {
+      "phase": 4,
+      "type": "wave",
+      "count": 18,
+      "speed": 4,
+      "hp_threshold": 0.2,
+      "fire_interval": 50,
+      "damage": 13,
+      "r": 6,
+      "color": "#aa00ff",
+      "maxLife": 350,
+      "trajectory": "straight"
+    }
+  ],
+  "threat_5": [
+    {
+      "phase": 1,
+      "type": "radial",
+      "count": 30,
+      "speed": 4,
+      "hp_threshold": 1,
+      "fire_interval": 40,
+      "damage": 10,
+      "r": 18,
+      "color": "#ff1a6e",
+      "maxLife": 260,
+      "trajectory": "straight",
+      "movement_type": "wobble",
+      "dir_offset": -180
+    },
+    {
+      "phase": 2,
+      "type": "spiral",
+      "count": 18,
+      "speed": 5.5,
+      "hp_threshold": 0.75,
+      "fire_interval": 28,
+      "damage": 19,
+      "r": 17,
+      "color": "#ff6600",
+      "maxLife": 320,
+      "trajectory": "straight",
+      "movement_type": "circular",
+      "movement_speed": 0.035
+    },
+    {
+      "phase": 3,
+      "type": "aimed",
+      "count": 15,
+      "speed": 7,
+      "hp_threshold": 0.5,
+      "fire_interval": 25,
+      "damage": 16,
+      "r": 7,
+      "color": "#ffaa00",
+      "maxLife": 320,
+      "trajectory": "straight",
+      "movement_type": "track_player_x"
+    },
+    {
+      "phase": 4,
+      "type": "wave",
+      "count": 22,
+      "speed": 5,
+      "hp_threshold": 0.3,
+      "fire_interval": 45,
+      "damage": 13,
+      "r": 6,
+      "color": "#aa00ff",
+      "maxLife": 350,
+      "trajectory": "straight",
+      "movement_type": "static"
+    },
+    {
+      "phase": 5,
+      "type": "chaos",
+      "count": 16,
+      "speed": 6,
+      "hp_threshold": 0.15,
+      "fire_interval": 22,
+      "damage": 12,
+      "r": 6,
+      "color": "#ff1a6e",
+      "maxLife": 300,
+      "trajectory": "straight",
+      "movement_type": "figure8",
+      "movement_speed": 0.05
+    }
+  ]
 }

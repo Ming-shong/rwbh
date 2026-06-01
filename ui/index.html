@@ -1319,10 +1319,13 @@ const PANEL_MGR = {
       };
     });
     this._layoutState = state;
+    try { localStorage.setItem('rwbh_layout', JSON.stringify(state)); } catch(_) {}
   },
 
   loadLayout() {
     try {
+      const saved = localStorage.getItem('rwbh_layout');
+      if (saved) this._layoutState = JSON.parse(saved);
       const state = this._layoutState;
       if (!state) return;
       Object.entries(state).forEach(([id, s]) => {
@@ -1899,10 +1902,16 @@ window.addEventListener("load", () => {
           const root = document.documentElement;
           Object.entries(cfg.theme.vars).forEach(([k, v]) => root.style.setProperty(k, v));
         }
-        // 故事文案（注入到 map.js）
+        // 故事文案
         if (cfg.lore) window._CUSTOM_LORE = cfg.lore;
         // 玩家機制（注入到 player.js）
         if (cfg.mechanics) window._CUSTOM_MECHANICS = cfg.mechanics;
+        // 遊戲平衡
+        if (cfg.balance) window._CUSTOM_BALANCE = cfg.balance;
+        // 奇物定義（覆蓋預設）
+        if (cfg.relics) Object.assign(window.RELIC_DEFS || {}, cfg.relics);
+        // 遊戲標題
+        if (cfg.lore?.game_title) document.title = cfg.lore.game_title;
       }
     } catch (_) { /* 無自訂設定，使用預設 */ }
 

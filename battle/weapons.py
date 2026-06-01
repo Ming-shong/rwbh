@@ -110,21 +110,19 @@ def get_weapon(weapon_id: str) -> dict | None:
 
 
 def get_all_weapons_dict() -> dict:
-    """回傳合併後的完整武器字典（自訂武器優先）。"""
-    custom_data   = _load_custom()
-    custom_weapons = custom_data.get("custom_weapons", {})
-    deleted        = set(custom_data.get("deleted_defaults", []))
+    """回傳合併後的完整武器字典（自訂武器優先覆蓋預設，支援刪除）。"""
+    custom_weapons = _load_custom()
+    deleted = set(custom_weapons.pop("_deleted_defaults", []))
 
     result = {}
-    # 1. 預設武器（移除已刪除的，pulse_gun 永不刪除）
     for wid, wdata in WEAPONS.items():
         if wid in deleted and wid != "pulse_gun":
             continue
         result[wid] = wdata
 
-    # 2. 合併自訂武器
     for wid, wdata in custom_weapons.items():
-        result[wid] = wdata
+        if isinstance(wdata, dict):
+            result[wid] = wdata
 
     return result
 

@@ -1,0 +1,62 @@
+{
+  "iron_core": {
+    "name": "鐵核",
+    "icon": "⬡",
+    "color": "#aaaaaa",
+    "bonus": {
+      "atk_mult": 1.25,
+      "max_hp_bonus": 0,
+      "fire_rate_mult": 1
+    },
+    "drop_threat_min": 3,
+    "drop_rate": 0.4
+  },
+  "crimson_shard": {
+    "name": "赤晶碎片",
+    "icon": "◈",
+    "color": "#ff4444",
+    "bonus": {
+      "atk_mult": 1.5,
+      "max_hp_bonus": 0,
+      "fire_rate_mult": 0.9
+    },
+    "drop_threat_min": 4,
+    "drop_rate": 0.25
+  },
+  "vitality_core": {
+    "name": "活力核",
+    "icon": "♥",
+    "color": "#00ff88",
+    "bonus": {
+      "atk_mult": 1,
+      "max_hp_bonus": 30,
+      "fire_rate_mult": 1
+    },
+    "drop_threat_min": 2,
+    "drop_rate": 0.5
+  },
+  "rapid_crystal": {
+    "name": "速射結晶",
+    "icon": "⚡",
+    "color": "#ffee00",
+    "bonus": {
+      "atk_mult": 1,
+      "max_hp_bonus": 0,
+      "fire_rate_mult": 0.75
+    },
+    "drop_threat_min": 3,
+    "drop_rate": 0.3
+  },
+  "shadow_eye": {
+    "name": "暗影之眼",
+    "icon": "◉",
+    "color": "#aa44ff",
+    "bonus": {
+      "atk_mult": 1.35,
+      "max_hp_bonus": 10,
+      "fire_rate_mult": 0.85
+    },
+    "drop_threat_min": 5,
+    "drop_rate": 0.15
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "vars": {
+    "--accent": "#00f0ff",
+    "--boss": "#ff1a6e",
+    "--mob": "#ff6b35",
+    "--warning": "#ffaa00",
+    "--green": "#00ff88",
+    "--danger": "#ff3a3a",
+    "--bg": "#050810",
+    "--panel": "#0a0f1e",
+    "--text": "#c8deff",
+    "--muted": "#4a6080"
+  }
+}

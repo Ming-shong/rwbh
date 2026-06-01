@@ -164,7 +164,8 @@ def api_config():
     包含：visuals, mechanics, lore, sfx, vfx, theme, balance
     """
     result = {}
-    for key in ["visuals", "mechanics", "lore", "sfx", "vfx", "theme", "balance"]:
+    for key in ["visuals", "mechanics", "lore", "sfx", "vfx", "theme", "balance",
+                "weapons", "relics", "patterns", "enemy_data"]:
         fpath = DATA_DIR / f"custom_{key}.json"
         if fpath.exists():
             try:
@@ -233,35 +234,62 @@ def api_export_folium():
 @app.post("/api/dev/import")
 def api_dev_import():
     """
-    接收開發者編輯器下載的設計 JSON，
-    依 key 分別寫入 data/custom_*.json。
+    接收開發者編輯器上傳的設計 JSON。
+
+    enemy_data 拆分寫入：
+      custom_enemy_data.json  ← boss_names, mob_prefixes, mob_counts, abilities
+      custom_patterns.json    ← patterns（供 battle/boss.py 使用）
+      custom_visuals.json     ← visuals（供 /api/config 使用）
+
+    其餘 key 直接對應檔案：
+      weapons  → custom_weapons.json
+      relics   → custom_relics.json
+      balance  → custom_balance.json
+      mechanics→ custom_mechanics.json
+      theme    → custom_theme.json
+      lore     → custom_lore.json（phase_lines / victory / defeat 等）
     """
     data = request.get_json(silent=True) or {}
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     written = []
-    mapping = {
-        "patterns":  "custom_patterns.json",
-        "visuals":   "custom_visuals.json",
+
+    def _write(filename: str, content: dict):
+        (DATA_DIR / filename).write_text(
+            json.dumps(content, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        written.append(filename)
+
+    # ── 敵人數據（拆分）─────────────────────────────────────────────────────
+    if "enemy_data" in data:
+        ed = data["enemy_data"]
+        # 1. 元數據：名稱 / 數量 / 能力
+        _write("custom_enemy_data.json", {
+            "boss_names":   ed.get("boss_names",   []),
+            "mob_prefixes": ed.get("mob_prefixes", []),
+            "mob_counts":   ed.get("mob_counts",   {}),
+            "abilities":    ed.get("abilities",    {}),
+        })
+        # 2. 彈幕 pattern（boss.py 讀）
+        if "patterns" in ed:
+            _write("custom_patterns.json", ed["patterns"])
+        # 3. 外觀（/api/config 讀）
+        if "visuals" in ed:
+            _write("custom_visuals.json", ed["visuals"])
+
+    # ── 其他 key 直接寫入 ────────────────────────────────────────────────────
+    simple_map = {
         "weapons":   "custom_weapons.json",
-        "sfx":       "custom_sfx.json",
-        "vfx":       "custom_vfx.json",
-        "theme":     "custom_theme.json",
-        "mechanics": "custom_mechanics.json",
-        "abilities": "custom_abilities.json",
+        "relics":    "custom_relics.json",
         "balance":   "custom_balance.json",
-        "world":     "custom_world.json",
+        "mechanics": "custom_mechanics.json",
+        "theme":     "custom_theme.json",
         "lore":      "custom_lore.json",
         "ui_layout": "custom_layout.json",
-        "relics":    "custom_relics.json",
     }
-    for key, filename in mapping.items():
+    for key, filename in simple_map.items():
         if key in data:
-            path = DATA_DIR / filename
-            path.write_text(
-                json.dumps(data[key], ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
-            written.append(filename)
+            _write(filename, data[key])
+
     return ok({"written": written})
 
 

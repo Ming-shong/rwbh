@@ -12,12 +12,13 @@ window.BULLETS = (() => {
       r: 4, damage: 10, team: 'enemy', color: '#ff1a6e',
       life: 0, maxLife: 300,
       seeking: false, seekStrength: 0,
+      angularVelocity: 0,
     });
   }
 
   let _activeCount = 0;
 
-  function spawn({ x, y, vx, vy, r = 4, damage = 10, team = 'enemy', color = '#ff1a6e', maxLife = 300, seeking = false, seekStrength = 0 }) {
+  function spawn({ x, y, vx, vy, r = 4, damage = 10, team = 'enemy', color = '#ff1a6e', maxLife = 300, seeking = false, seekStrength = 0, angularVelocity = 0 }) {
     for (const b of pool) {
       if (!b.active) {
         b.active = true;
@@ -25,6 +26,7 @@ window.BULLETS = (() => {
         b.r = r; b.damage = damage; b.team = team;
         b.color = color; b.life = 0; b.maxLife = maxLife;
         b.seeking = seeking; b.seekStrength = seekStrength;
+        b.angularVelocity = angularVelocity;
         return b;
       }
     }
@@ -33,12 +35,20 @@ window.BULLETS = (() => {
 
   function update(cw, ch) {
     _activeCount = 0;
-    // 取得追蹤目標（Boss 位置）
     const target = ENEMY?.getBossPos?.() || { x: cw / 2, y: 80 };
 
     for (const b of pool) {
       if (!b.active) continue;
       _activeCount++;
+
+      // 曲線軌跡（旋轉速度向量）
+      if (b.angularVelocity !== 0) {
+        const cos = Math.cos(b.angularVelocity);
+        const sin = Math.sin(b.angularVelocity);
+        const nvx = b.vx * cos - b.vy * sin;
+        const nvy = b.vx * sin + b.vy * cos;
+        b.vx = nvx; b.vy = nvy;
+      }
 
       // 追蹤邏輯
       if (b.seeking && b.team === 'player') {
@@ -48,7 +58,6 @@ window.BULLETS = (() => {
         if (dist > 0) {
           b.vx += (dx / dist) * b.seekStrength;
           b.vy += (dy / dist) * b.seekStrength;
-          // 限制最大速度
           const spd = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
           if (spd > 10) { b.vx = b.vx / spd * 10; b.vy = b.vy / spd * 10; }
         }

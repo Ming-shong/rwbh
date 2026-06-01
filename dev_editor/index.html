@@ -207,7 +207,7 @@ const DESIGN = {
   },
   server_assignments:{
     patterns:true, visuals:true, weapons:true, mechanics:false,
-    abilities:false, balance:true, world:false, lore:false, sfx:false, vfx:false, theme:false,
+    abilities:false, balance:true, world:false, lore:true, sfx:false, vfx:false, theme:false,
     relics:true,
   },
 };
@@ -324,14 +324,30 @@ const APP = {
   async applyToServer() {
     const serverUrl = prompt('Flask 伺服器位址（預設 http://localhost:5000）:', 'http://localhost:5000');
     if (!serverUrl) return;
-    const payload = {};
-    Object.keys(DESIGN.server_assignments).forEach(key => {
-      if (DESIGN.server_assignments[key]) payload[key] = DESIGN[key];
-    });
-    // ui_layout 永遠包含（若存在）
-    if (DESIGN.ui_layout && Object.keys(DESIGN.ui_layout).length > 0) {
-      payload['ui_layout'] = DESIGN.ui_layout;
-    }
+
+    // ── 敵人數據（單一 key 包含所有敵人相關設定）────────────────────────────
+    const payload = {
+      enemy_data: {
+        boss_names:   (DESIGN.lore?.boss_names   || []).slice(0, 5),
+        mob_prefixes: (DESIGN.lore?.mob_prefixes || []).slice(0, 5),
+        mob_counts:   DESIGN.mob_counts   || {},
+        patterns:     DESIGN.patterns     || {},
+        visuals:      DESIGN.visuals      || {},
+        abilities:    DESIGN.abilities    || {},
+      },
+      weapons:   { ...DESIGN.weapons, _deleted_defaults: DESIGN.world?._deleted_weapons || [] },
+      relics:    DESIGN.relics    || {},
+      balance:   DESIGN.balance   || {},
+      mechanics: DESIGN.mechanics || {},
+      theme:     DESIGN.theme     || {},
+      lore: (() => {
+        const { boss_names, mob_prefixes, ...rest } = DESIGN.lore || {};
+        return rest;
+      })(),
+      ...(DESIGN.ui_layout && Object.keys(DESIGN.ui_layout).length > 0
+          ? { ui_layout: DESIGN.ui_layout } : {}),
+    };
+
     try {
       const resp = await fetch(`${serverUrl}/api/dev/import`, {
         method:'POST', headers:{'Content-Type':'application/json'},
@@ -813,6 +829,10 @@ const TABS = {
         <div class="form-row"><label class="form-label">威脅等級</label><select class="form-select" style="flex:none;width:60px" onchange="DESIGN.custom_pois.find(p=>p.id==='${poi.id}').threat=+this.value;APP.renderTab('enemy_data')">${[1,2,3,4,5].map(lv=>`<option value="${lv}" ${t===lv?'selected':''}>Lv.${lv}</option>`).join('')}</select></div>`:''}
         <div class="form-row"><label class="form-label">Boss 名稱</label>
           <input class="form-input" value="${bossName}" placeholder="未命名 Boss" onchange="if(!DESIGN.lore.boss_names)DESIGN.lore.boss_names=[];DESIGN.lore.boss_names[${t-1}]=this.value"></div>
+        <div class="form-row"><label class="form-label">移動模式</label>
+          <select class="form-select" onchange="ED.setBossMovement(${t},'type',this.value);PREVIEW.restart()">
+            ${['wobble','circular','figure8','track_player_x','static'].map(m=>`<option value="${m}" ${movT===m?'selected':''}>${{wobble:'正弦擺動',circular:'圓形軌道',figure8:'8字形',track_player_x:'跟隨X軸',static:'固定靜止'}[m]}</option>`).join('')}
+          </select></div>
       `;
 
       const visualHTML=eType==='mob'?`
@@ -857,7 +877,10 @@ const TABS = {
           </div>
           ${eType==='boss'?`<div class="form-row"><label class="form-label">Boss 移動</label>
             <select class="form-select" style="flex:none;width:130px" onchange="ED.setPhase('${key}',${i},'movement_type',this.value)">
-              ${['wobble','circular','figure8','track_player_x','static'].map(m=>`<option value="${m}" ${pm===m?'selected':''}>${ML[m]}</option>`).join('')}</select></div>`:''}
+              ${['wobble','circular','figure8','track_player_x','static'].map(m=>`<option value="${m}" ${pm===m?'selected':''}>${ML[m]}</option>`).join('')}</select></div>
+          <div class="form-row"><label class="form-label">移動速度</label>
+            <input type="range" class="form-input" min="0.005" max="0.08" step="0.005" value="${p.movement_speed??0.018}" oninput="ED.setPhase('${key}',${i},'movement_speed',+this.value);this.nextElementSibling.textContent=this.value">
+            <span class="range-val">${p.movement_speed??0.018}</span></div>`:''}
           <div class="form-row"><label class="form-label">攻擊類型</label>
             <select class="form-select" style="flex:none;width:110px" onchange="ED.setPhase('${key}',${i},'type',this.value)">
               ${['radial','spiral','aimed','wave','chaos','parabola'].map(tt=>`<option value="${tt}" ${p.type===tt?'selected':''}>${{radial:'放射',spiral:'螺旋',aimed:'瞄準',wave:'波浪',chaos:'混沌',parabola:'拋物線'}[tt]}</option>`).join('')}</select></div>
@@ -1527,7 +1550,7 @@ const SFX_PREVIEW = {
 const PREVIEW = {
   canvas: null, ctx: null, animId: null, running: false,
   poi: null, bossHp: 0, bossMaxHp: 0, bossX: 0, bossY: 0,
-  wobbleT: 0, bossAngle: 0, spiralAngle: 0, shootTimer: 0,
+  wobbleT: 0, bossAngle: 0, spiralAngle: 0, shootTimer: 0, bossHitFlash: 0,
   bullets: [], playerX: 0, playerY: 0, mouseX: -1, mouseY: -1,
   fps: 0, lastFpsTime: 0, fpsFrames: 0, stars: [],
   phaseIdx: 0, mobList: [],
@@ -1597,15 +1620,21 @@ const PREVIEW = {
   },
 
   loadPoi(poi) {
+    // 停止舊的 animation loop，避免遞迴
+    if (this.animId) { cancelAnimationFrame(this.animId); this.animId = null; }
     this.poi = poi;
     const key = `threat_${poi.threat}`;
-    const patterns = DESIGN.patterns[key] || [];
     const hpMult = DESIGN.balance?.difficulty?.enemy_hp_mult || 1.0;
-    this.bossHp = this.bossMaxHp = (poi.threat * 600) * hpMult;
+    // Boss 專用變數（mob 模式不使用）
+    if (poi.type === 'boss') {
+      this.bossHp = this.bossMaxHp = (poi.threat * 600) * hpMult;
+    } else {
+      this.bossHp = this.bossMaxHp = 0;
+    }
     this.bossX = this.canvas.width / 2;
     this.bossY = 70;
     this.wobbleT = 0; this.bossAngle = 0; this.spiralAngle = 0;
-    this.shootTimer = 0; this.phaseIdx = 0;
+    this.shootTimer = 0; this.phaseIdx = 0; this.bossHitFlash = 0;
     this.bullets = []; this.playerBullets = []; this.playerShootTimer = 0;
     this.playerHp = this.playerMaxHp = DESIGN.mechanics?.player?.max_hp || 100;
     this.playerInvFrames = 0;
@@ -1614,7 +1643,9 @@ const PREVIEW = {
     this._arrowDrag = false; this._arrowDragPhase = null;
     // 初始化小怪列表（mob 模式）
     if (poi.type === 'mob') {
-      const count = (DESIGN.mob_counts?.[poi.threat]) ?? poi.mob_count ?? 3;
+      const t = poi.threat;
+      const count = (DESIGN.mob_counts?.[t]) ?? poi.mob_count ?? 3;
+      const mobMaxHp = t * 100 * hpMult;
       const cw = this.canvas.width;
       this.mobList = Array.from({length: count}, (_, i) => ({
         id: i,
@@ -1622,12 +1653,15 @@ const PREVIEW = {
         y: 80 + (Math.floor(i / 4)) * 70,
         wobT: (Math.PI * 2 / count) * i,
         dead: false,
+        hp: mobMaxHp, maxHp: mobMaxHp,
+        hitFlash: 0,
+        shootTimer: Math.floor(i * 20),
       }));
     } else {
       this.mobList = [];
     }
-    if (!this.running) this.start();
-    else this.restart();
+    this.running = false;
+    this.start();
   },
 
   toggle() {
@@ -1651,6 +1685,34 @@ const PREVIEW = {
     if (this.poi) this.loadPoi(this.poi);
   },
 
+  // 共用形狀繪製（與 enemy.js _drawShape 完全一致）
+  _drawSSShape(ctx, x, y, r, shape) {
+    switch (shape) {
+      case 'circle':   ctx.arc(x, y, r, 0, Math.PI*2); break;
+      case 'hexagon':
+        for(let i=0;i<6;i++){const a=(Math.PI*2/6)*i;i===0?ctx.moveTo(x+Math.cos(a)*r,y+Math.sin(a)*r):ctx.lineTo(x+Math.cos(a)*r,y+Math.sin(a)*r);}
+        break;
+      case 'pentagon':
+        for(let i=0;i<5;i++){const a=(Math.PI*2/5)*i-Math.PI/2;i===0?ctx.moveTo(x+Math.cos(a)*r,y+Math.sin(a)*r):ctx.lineTo(x+Math.cos(a)*r,y+Math.sin(a)*r);}
+        break;
+      case 'square':   ctx.rect(x-r, y-r, r*2, r*2); break;
+      case 'triangle':
+        for(let i=0;i<3;i++){const a=(Math.PI*2/3)*i-Math.PI/2;i===0?ctx.moveTo(x+Math.cos(a)*r,y+Math.sin(a)*r):ctx.lineTo(x+Math.cos(a)*r,y+Math.sin(a)*r);}
+        break;
+      case 'star':
+        for(let i=0;i<10;i++){const a=(Math.PI*2/10)*i-Math.PI/2,rv=i%2===0?r:r*0.42;i===0?ctx.moveTo(x+Math.cos(a)*rv,y+Math.sin(a)*rv):ctx.lineTo(x+Math.cos(a)*rv,y+Math.sin(a)*rv);}
+        break;
+      case 'cross': {
+        const arm=r*0.38;
+        ctx.rect(x-arm,y-r,arm*2,r*2);
+        ctx.rect(x-r,y-arm,r*2,arm*2);
+        break;
+      }
+      default: // diamond
+        ctx.moveTo(x,y-r);ctx.lineTo(x+r*0.65,y);ctx.lineTo(x,y+r);ctx.lineTo(x-r*0.65,y);
+    }
+  },
+
   _getCurrentPattern() {
     if (!this.poi) return null;
     const key = `threat_${this.poi.threat}`;
@@ -1665,6 +1727,19 @@ const PREVIEW = {
     const ratio = this.bossHp / this.bossMaxHp;
     let cur = phases[0];
     for (const p of phases) { if (ratio <= p.hp_threshold) cur = p; }
+    return cur;
+  },
+
+  _getCurrentMobPattern() {
+    if (!this.poi || this.poi.type !== 'mob') return null;
+    const key = `threat_${this.poi.threat}`;
+    const phases = DESIGN.patterns[key] || [];
+    if (!phases.length) return null;
+    if (this.forcedPhase >= 1) return phases.find(p => p.phase === this.forcedPhase) || phases[0];
+    const total = this.mobList.length;
+    const aliveRatio = total > 0 ? this.mobList.filter(m => !m.dead).length / total : 1;
+    let cur = phases[0];
+    for (const p of phases) { if (aliveRatio <= p.hp_threshold) cur = p; }
     return cur;
   },
 
@@ -1693,8 +1768,8 @@ const PREVIEW = {
     }
   },
 
-  _spawnBullets(p) {
-    const origin = this._getLaunchOrigin(p);
+  _spawnBullets(p, originOverride) {
+    const origin = originOverride || this._getLaunchOrigin(p);
     const bx = origin.x, by = origin.y;
     const dirRad = ((p.dir_offset || 0) * Math.PI / 180);
     const spdMult = DESIGN.balance?.difficulty?.enemy_speed_mult || 1.0;
@@ -1733,7 +1808,7 @@ const PREVIEW = {
     const _globalBm = DESIGN.visuals?.boss_movement?.[this.poi?.threat] || { type: 'wobble' };
     const _curPattern = this._getCurrentPattern();
     const bm = (this.poi?.type === 'boss')
-      ? { ..._globalBm, type: _curPattern?.movement_type || _globalBm.type }
+      ? { ..._globalBm, type: _curPattern?.movement_type || _globalBm.type, speed: _curPattern?.movement_speed ?? _globalBm.speed ?? 0.018 }
       : { type: 'static' };
 
     switch (bm.type) {
@@ -1754,7 +1829,7 @@ const PREVIEW = {
       case 'track_player_x': {
         const lag = bm.lag || 0.05;
         this.bossX += (this.playerX - this.bossX) * lag;
-        this.wobbleT += 0.018;
+        this.wobbleT += bm.speed;
         this.bossY = 70 + Math.sin(this.wobbleT) * 12;
         break;
       }
@@ -1763,14 +1838,14 @@ const PREVIEW = {
         this.bossY = 70;
         break;
       default: // wobble
-        this.wobbleT += 0.018;
+        this.wobbleT += bm.speed;
         this.bossX = cw / 2 + Math.sin(this.wobbleT * 0.7) * 40;
         this.bossY = 70 + Math.sin(this.wobbleT) * 18;
     }
 
     // ── Boss 射擊 ────────────────────────────────────────────
     const p = this._getCurrentPattern();
-    if (p && this.bossHp > 0) {
+    if (p && this.poi?.type === 'boss' && this.bossHp > 0) {
       const interval = (p.fire_interval || Math.max(14, 55 - (this.poi?.threat||1)*7));
       this.shootTimer++;
       if (this.shootTimer >= interval) { this.shootTimer = 0; this._spawnBullets(p); }
@@ -1826,40 +1901,36 @@ const PREVIEW = {
       const mv  = DESIGN.visuals.mob[t] || {};
       const col = mv.primary_color || '#ff6b35';
       const glow= mv.glow_intensity || 24;
+      const count = this.mobList.length;
+      const cols  = Math.ceil(Math.sqrt(count));
       this.mobList.forEach(m => {
         if (m.dead) return;
-        m.wobT = (m.wobT || 0) + 0.022;
+        m.wobT += 0.022;
+        if (m.hitFlash > 0) m.hitFlash--;
 
         // 位置更新（grid + 擺動）
-        const count = this.mobList.length;
-        const cols  = Math.ceil(Math.sqrt(count));
         const col_i = m.id % cols;
         const row_i = Math.floor(m.id / cols);
         m.x = (cw / (cols + 1)) * (col_i + 1) + Math.sin(m.wobT + col_i) * 35;
         m.y = 70 + row_i * 70 + Math.cos(m.wobT * 0.8) * 18;
 
-        // 小怪射擊（瞄準玩家）
-        m.shootTimer = (m.shootTimer || Math.floor(m.id * 20)) + 1;
-        const mobInterval = Math.max(50, 110 - t * 10);
-        if (m.shootTimer >= mobInterval) {
-          m.shootTimer = 0;
-          const dx = this.playerX - m.x, dy = this.playerY - m.y;
-          const dist = Math.sqrt(dx*dx + dy*dy);
-          if (dist > 0) {
-            const spd = (3 + t * 0.6) * (DESIGN.balance?.difficulty?.enemy_speed_mult || 1);
-            const dmg = (7 + t * 2) * (DESIGN.balance?.difficulty?.enemy_damage_mult || 1);
-            const spread = t >= 3 ? [-0.18, 0, 0.18] : [0];
-            spread.forEach(off => {
-              const base = Math.atan2(dy, dx) + off;
-              this.bullets.push({ x:m.x, y:m.y, vx:Math.cos(base)*spd, vy:Math.sin(base)*spd, r:5, color:col, life:0, maxLife:280, damage:dmg, traj:'straight', bounce:0, maxBounce:0 });
-            });
+        // 小怪射擊（依 DESIGN.patterns 的 phase 決定攻擊類型）
+        const mobP = this._getCurrentMobPattern();
+        if (mobP) {
+          const mobInterval = mobP.fire_interval || Math.max(50, 110 - t * 10);
+          m.shootTimer++;
+          if (m.shootTimer >= mobInterval) {
+            m.shootTimer = 0;
+            this._spawnBullets(mobP, { x: m.x, y: m.y });
           }
         }
 
+        const flash = m.hitFlash > 0;
+        const drawCol = flash ? '#ffffff' : col;
         const r = (10 + t * 3) * (mv.size_multiplier || 1.0);
         this.ctx.save();
-        this.ctx.shadowBlur = glow; this.ctx.shadowColor = col;
-        this.ctx.strokeStyle = col; this.ctx.lineWidth = 2;
+        this.ctx.shadowBlur = glow; this.ctx.shadowColor = drawCol;
+        this.ctx.strokeStyle = drawCol; this.ctx.lineWidth = 2;
         this.ctx.beginPath();
         const shape = mv.shape || 'hexagon';
         const sides = {hexagon:6, square:4, triangle:3, circle:0, star:10}[shape] || 6;
@@ -1871,21 +1942,26 @@ const PREVIEW = {
         }
         this.ctx.closePath();
         const rgb = col.startsWith('#') ? `${parseInt(col.slice(1,3),16)},${parseInt(col.slice(3,5),16)},${parseInt(col.slice(5,7),16)}` : '255,107,53';
-        this.ctx.fillStyle = `rgba(${rgb},.18)`; this.ctx.fill(); this.ctx.stroke();
-        this.ctx.fillStyle = `hsl(40,100%,60%)`; this.ctx.shadowBlur = 8; this.ctx.shadowColor = col;
+        this.ctx.fillStyle = flash ? 'rgba(255,255,255,.25)' : `rgba(${rgb},.18)`; this.ctx.fill(); this.ctx.stroke();
+        this.ctx.fillStyle = flash ? '#ffffff' : `hsl(40,100%,60%)`; this.ctx.shadowBlur = 8; this.ctx.shadowColor = drawCol;
         this.ctx.beginPath(); this.ctx.arc(m.x, m.y, r*.35, 0, Math.PI*2); this.ctx.fill();
+        // HP 血條
+        const hpFrac = m.hp / m.maxHp;
+        const bw = r * 2.2, bh = 4;
+        const bxBar = m.x - bw/2, byBar = m.y - r - 9;
+        this.ctx.fillStyle = 'rgba(0,0,0,.55)'; this.ctx.fillRect(bxBar, byBar, bw, bh);
+        this.ctx.fillStyle = hpFrac > 0.5 ? '#44ff44' : hpFrac > 0.25 ? '#ffee00' : '#ff4444';
+        this.ctx.fillRect(bxBar, byBar, bw * hpFrac, bh);
         this.ctx.restore();
         // 子形狀
         (mv.sub_shapes||[]).forEach(ss => {
           const sx = m.x + (ss.offset_x||0), sy = m.y + (ss.offset_y||0);
           const sr = r * (ss.size_mult||0.4);
-          const sc2 = ss.color || col;
+          const ssCol = flash ? '#ffffff' : (ss.color || col);
           this.ctx.save();
-          this.ctx.shadowBlur = ss.glow_intensity||16; this.ctx.shadowColor = sc2;
-          this.ctx.fillStyle = sc2; this.ctx.beginPath();
-          const ssShape = ss.shape || 'circle';
-          if (ssShape==='circle') { this.ctx.arc(sx,sy,sr,0,Math.PI*2); }
-          else { const sides={pentagon:5,hexagon:6,square:4,triangle:3,star:10,diamond:4}[ssShape]||4; for(let i=0;i<sides;i++){const a=(Math.PI*2/sides)*i-Math.PI/2;i===0?this.ctx.moveTo(sx+Math.cos(a)*sr,sy+Math.sin(a)*sr):this.ctx.lineTo(sx+Math.cos(a)*sr,sy+Math.sin(a)*sr);} }
+          this.ctx.shadowBlur = ss.glow_intensity||16; this.ctx.shadowColor = ssCol;
+          this.ctx.fillStyle = ssCol; this.ctx.beginPath();
+          this._drawSSShape(this.ctx, sx, sy, sr, ss.shape || 'circle');
           this.ctx.closePath(); this.ctx.fill(); this.ctx.restore();
         });
       });
@@ -1902,10 +1978,12 @@ const PREVIEW = {
 
     // 渲染 Boss（boss 模式）
     if (this.poi?.type === 'boss' && this.bossHp > 0) {
+      if (this.bossHitFlash > 0) this.bossHitFlash--;
       const t = this.poi.threat;
       const bv = visuals.boss[t] || {};
       const r = (28 + t*7) * (bv.size_multiplier||1.0);
-      const col = bv.primary_color || '#ff1a6e';
+      const flash = this.bossHitFlash > 0;
+      const col = flash ? '#ffffff' : (bv.primary_color || '#ff1a6e');
       const glow = bv.glow_intensity || 50;
       const shape = bv.shape || 'diamond';
       const hpRatio = this.bossHp / this.bossMaxHp;
@@ -1913,13 +1991,17 @@ const PREVIEW = {
       this.ctx.shadowBlur = glow; this.ctx.shadowColor = col;
       // 旋轉光環
       const spokeCount = bv.spoke_count !== undefined ? bv.spoke_count : 6;
+      const rotSpeed = bv.rotation_speed || 0.5;
+      const spokeCol = flash ? '#ffffff' : (bv.spoke_color || bv.primary_color || '#ff1a6e');
       if (spokeCount > 0) {
-        this.ctx.save(); this.ctx.translate(this.bossX, this.bossY); this.ctx.rotate(this.wobbleT*0.5);
-        this.ctx.strokeStyle = `rgba(${parseInt(col.slice(1,3),16)},${parseInt(col.slice(3,5),16)},${parseInt(col.slice(5,7),16)},0.4)`;
+        this.ctx.save(); this.ctx.translate(this.bossX, this.bossY); this.ctx.rotate(this.wobbleT * rotSpeed);
+        const _sr = spokeCol.startsWith('#') ? `${parseInt(spokeCol.slice(1,3),16)},${parseInt(spokeCol.slice(3,5),16)},${parseInt(spokeCol.slice(5,7),16)}` : '255,255,255';
+        this.ctx.strokeStyle = `rgba(${_sr},${0.25 + hpRatio * 0.3})`;
         this.ctx.lineWidth = 2;
         for(let i=0;i<spokeCount;i++){const a=(Math.PI*2/spokeCount)*i;this.ctx.beginPath();this.ctx.moveTo(Math.cos(a)*(r+8),Math.sin(a)*(r+8));this.ctx.lineTo(Math.cos(a)*(r+22),Math.sin(a)*(r+22));this.ctx.stroke();}
         this.ctx.restore();
       }
+      // 旋轉光環用 spoke_color（flash 時白色）
       // 主體
       this.ctx.fillStyle = col;
       this.ctx.beginPath();
@@ -1941,15 +2023,12 @@ const PREVIEW = {
       (bv.sub_shapes||[]).forEach(ss => {
         const sx = this.bossX + (ss.offset_x||0), sy = this.bossY + (ss.offset_y||0);
         const sr = r * (ss.size_mult||0.5);
-        const sc2 = ss.color || col;
+        const sc2 = flash ? '#ffffff' : (ss.color || col);
         this.ctx.save();
         this.ctx.shadowBlur = ss.glow_intensity||20; this.ctx.shadowColor = sc2;
         this.ctx.fillStyle = sc2;
         this.ctx.beginPath();
-        const ssShape = ss.shape || 'circle';
-        if (ssShape==='circle') { this.ctx.arc(sx, sy, sr, 0, Math.PI*2); }
-        else if (ssShape==='diamond') { this.ctx.moveTo(sx,sy-sr);this.ctx.lineTo(sx+sr*.65,sy);this.ctx.lineTo(sx,sy+sr);this.ctx.lineTo(sx-sr*.65,sy); }
-        else { const sides={pentagon:5,hexagon:6,square:4,triangle:3,star:10,cross:4}[ssShape]||5; for(let i=0;i<sides;i++){const a=(Math.PI*2/sides)*i-Math.PI/2;i===0?this.ctx.moveTo(sx+Math.cos(a)*sr,sy+Math.sin(a)*sr):this.ctx.lineTo(sx+Math.cos(a)*sr,sy+Math.sin(a)*sr);} }
+        this._drawSSShape(this.ctx, sx, sy, sr, ss.shape || 'circle');
         this.ctx.closePath(); this.ctx.fill();
         // 輻條
         if ((ss.spoke_count||0) > 0) {
@@ -1958,11 +2037,12 @@ const PREVIEW = {
         }
         this.ctx.restore();
       });
-      // 核心
-      const ic = `hsl(${hpRatio*120},100%,55%)`;
+      // 核心（flash 時白色；core_color_mode: hp_shift=漸變, fixed=固定）
+      const ic = flash ? '#ffffff' : (bv.core_color_mode === 'fixed' ? (bv.primary_color||'#ff1a6e') : `hsl(${hpRatio*120},100%,55%)`);
       this.ctx.fillStyle = ic; this.ctx.shadowBlur=20; this.ctx.shadowColor=ic;
-      this.ctx.beginPath(); this.ctx.arc(this.bossX, this.bossY, r*.3, 0, Math.PI*2); this.ctx.fill();
-      this.ctx.fillStyle='#fff'; this.ctx.beginPath(); this.ctx.arc(this.bossX,this.bossY,r*.1,0,Math.PI*2); this.ctx.fill();
+      this.ctx.beginPath(); this.ctx.arc(this.bossX, this.bossY, r*.32, 0, Math.PI*2); this.ctx.fill();
+      this.ctx.fillStyle='#fff'; this.ctx.shadowBlur=8; this.ctx.shadowColor='#fff';
+      this.ctx.beginPath(); this.ctx.arc(this.bossX,this.bossY,r*.12,0,Math.PI*2); this.ctx.fill();
       // Boss HP 條
       const bw=Math.min(cw*.5,280),bx2=(cw-bw)/2;
       this.ctx.fillStyle='rgba(0,0,0,.6)'; this.ctx.fillRect(bx2,8,bw,14);
@@ -2026,7 +2106,8 @@ const PREVIEW = {
         const dx = pb.x - this.bossX, dy = pb.y - this.bossY;
         if (dx*dx + dy*dy < (bossR + pb.r)**2) {
           this.bossHp = Math.max(0, this.bossHp - pb.damage);
-          this.damageNumbers.push({ x: this.bossX + (Math.random()-.5)*30, y: this.bossY - 20, val: pb.damage, life: 0, maxLife: 40 });
+          this.bossHitFlash = 8;
+          this.damageNumbers.push({ x: this.bossX + (Math.random()-.5)*30, y: this.bossY - 20, val: pb.damage, life: 0, maxLife: 40, type: 'enemy' });
           document.getElementById('pv-hp').textContent = `Boss HP: ${Math.round(this.bossHp)}/${this.bossMaxHp}`;
           return false;
         }
@@ -2039,8 +2120,10 @@ const PREVIEW = {
           const mr = (10 + t*3) * (DESIGN.visuals?.mob?.[t]?.size_multiplier||1);
           const dx = pb.x - m.x, dy = pb.y - m.y;
           if (dx*dx + dy*dy < (mr + pb.r)**2) {
-            m.dead = true;
-            this.damageNumbers.push({ x: m.x, y: m.y - 16, val: pb.damage, life: 0, maxLife: 40 });
+            m.hp = Math.max(0, m.hp - pb.damage);
+            m.hitFlash = 8;
+            this.damageNumbers.push({ x: m.x + (Math.random()-.5)*20, y: m.y - 16, val: pb.damage, life: 0, maxLife: 40, type: 'enemy' });
+            if (m.hp <= 0) m.dead = true;
             return false;
           }
         }
@@ -2109,12 +2192,12 @@ const PREVIEW = {
       this.ctx.save();
       this.ctx.globalAlpha = t;
       const isRevive = typeof dn.val !== 'number';
-      const dnColor = isRevive ? '#00ff88' : '#ff3a3a';
+      const dnColor = isRevive ? '#00ff88' : dn.type === 'enemy' ? '#ffcc00' : '#ff3a3a';
       this.ctx.shadowBlur = 6; this.ctx.shadowColor = dnColor;
       this.ctx.fillStyle = dnColor;
       this.ctx.font = `bold ${10 + Math.round((1-t)*4)}px monospace`;
       this.ctx.textAlign = 'center';
-      this.ctx.fillText(isRevive ? String(dn.val) : `-${dn.val}`, dn.x, dn.y - dn.life * 0.5);
+      this.ctx.fillText(isRevive ? String(dn.val) : dn.type === 'enemy' ? `${dn.val}` : `-${dn.val}`, dn.x, dn.y - dn.life * 0.5);
       this.ctx.restore();
       dn.life++;
     }

@@ -51,25 +51,25 @@
       "core_color_mode": "hp_shift",
       "sub_shapes": [
         {
-          "shape": "cross",
+          "shape": "diamond",
           "color": "#ff3282",
           "size_mult": 0.5,
-          "offset_x": -50,
+          "offset_x": -56,
           "offset_y": 0,
           "glow_intensity": 20,
           "spoke_count": 6
         },
         {
-          "shape": "cross",
+          "shape": "diamond",
           "color": "#ff3282",
           "size_mult": 0.5,
-          "offset_x": 50,
+          "offset_x": 56,
           "offset_y": 0,
           "glow_intensity": 20,
           "spoke_count": 6
         },
         {
-          "shape": "star",
+          "shape": "circle",
           "color": "#fb3250",
           "size_mult": 0.7,
           "offset_x": 0,

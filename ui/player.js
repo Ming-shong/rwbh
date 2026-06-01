@@ -3,8 +3,8 @@
  * 玩家屬性與邏輯（Phase 5 更新）：武器系統整合、各 pattern 射擊行為。
  */
 window.PLAYER_OBJ = (() => {
-  const MAX_HP       = 100;
-  const INV_FRAMES   = 90;
+  const MAX_HP        = 100;
+  const INV_FRAMES    = 90;
   const PLAYER_RADIUS = 8;
 
   let x, y, hp, invFrames, shootTimer, subShootTimer, mouseX, mouseY;
@@ -12,13 +12,16 @@ window.PLAYER_OBJ = (() => {
   let particles = [];
   let prevPhase = 1;
   let effectiveMaxHp = MAX_HP;
+  let _cm = {};   // 快取的自訂機制設定
 
   function init(cx, cy) {
+    _cm = window._CUSTOM_MECHANICS?.player || {};
     x = cx; y = cy;
     const bonus = window.RELICS?.getBonus?.() || {};
-    effectiveMaxHp = MAX_HP + (bonus.max_hp_bonus || 0);
+    effectiveMaxHp = (_cm.max_hp || MAX_HP) + (bonus.max_hp_bonus || 0);
     hp = (typeof STATE !== 'undefined' && STATE.player.hp > 0)
       ? Math.min(STATE.player.hp, effectiveMaxHp) : effectiveMaxHp;
+    if (typeof STATE !== 'undefined') STATE.player.maxHp = effectiveMaxHp;
     invFrames = 0;
     shootTimer = 0;
     subShootTimer = 0;
@@ -35,8 +38,8 @@ window.PLAYER_OBJ = (() => {
     if (!alive) return;
 
     // X + Y 自由移動，Y 軸上限限制在畫面 20% 以下（避免貼近 boss 區域）
-    x += (mouseX - x) * 0.14;
-    y += (mouseY - y) * 0.14;
+    x += (mouseX - x) * (_cm.move_smoothing || 0.14);
+    y += (mouseY - y) * (_cm.move_smoothing || 0.14);
     x = Math.max(16, Math.min(cw - 16, x));
     y = Math.max(ch * 0.20, Math.min(ch - 30, y));
 
@@ -76,6 +79,8 @@ window.PLAYER_OBJ = (() => {
     if (curPhase !== prevPhase) {
       prevPhase = curPhase;
       SFX?.phaseChange?.();
+      const lines = window._CUSTOM_LORE?.phase_lines?.[String(curPhase)];
+      if (lines?.length) window.HUD?.toast?.(lines[Math.floor(Math.random() * lines.length)], 2000);
     }
 
   }
@@ -103,29 +108,30 @@ window.PLAYER_OBJ = (() => {
     const positions = _subPos(weapon.sub_position);
 
     positions.forEach(({ sx, sy }) => {
-      _spawnPattern(pattern, sx, sy, color, damage);
+      _spawnPattern(pattern, sx, sy, color, damage, weapon.bullet_r);
     });
   }
 
-  function _spawnPattern(pattern, ox, oy, color, damage) {
+  function _spawnPattern(pattern, ox, oy, color, damage, br) {
+    const r0 = br || 3;
     switch (pattern) {
       case 'single':
-        BULLETS.spawn({ x: ox, y: oy - 10, vx: 0, vy: -11, r: 3, damage, team: 'player', color, maxLife: 100 });
+        BULLETS.spawn({ x: ox, y: oy - 10, vx: 0, vy: -11, r: r0, damage, team: 'player', color, maxLife: 100 });
         break;
       case 'twin':
-        BULLETS.spawn({ x: ox - 8, y: oy - 6, vx: -0.3, vy: -11, r: 3, damage, team: 'player', color, maxLife: 110 });
-        BULLETS.spawn({ x: ox + 8, y: oy - 6, vx:  0.3, vy: -11, r: 3, damage, team: 'player', color, maxLife: 110 });
+        BULLETS.spawn({ x: ox - 8, y: oy - 6, vx: -0.3, vy: -11, r: r0, damage, team: 'player', color, maxLife: 110 });
+        BULLETS.spawn({ x: ox + 8, y: oy - 6, vx:  0.3, vy: -11, r: r0, damage, team: 'player', color, maxLife: 110 });
         break;
       case 'spread_5': {
         const angles = [-0.35, -0.17, 0, 0.17, 0.35];
-        angles.forEach(a => BULLETS.spawn({ x: ox, y: oy - 8, vx: Math.sin(a)*10, vy: -Math.cos(a)*10, r: 2.5, damage, team: 'player', color, maxLife: 80 }));
+        angles.forEach(a => BULLETS.spawn({ x: ox, y: oy - 8, vx: Math.sin(a)*10, vy: -Math.cos(a)*10, r: br||2.5, damage, team: 'player', color, maxLife: 80 }));
         break;
       }
       case 'rapid':
-        BULLETS.spawn({ x: ox+(Math.random()-0.5)*4, y: oy-8, vx:(Math.random()-0.5)*0.5, vy:-13, r:2, damage, team:'player', color, maxLife:90 });
+        BULLETS.spawn({ x: ox+(Math.random()-0.5)*4, y: oy-8, vx:(Math.random()-0.5)*0.5, vy:-13, r: br||2, damage, team:'player', color, maxLife:90 });
         break;
       case 'seek':
-        BULLETS.spawn({ x: ox, y: oy-10, vx:0, vy:-8, r:4, damage, team:'player', color, maxLife:180, seeking:true, seekStrength:0.35 });
+        BULLETS.spawn({ x: ox, y: oy-10, vx:0, vy:-8, r: br||4, damage, team:'player', color, maxLife:180, seeking:true, seekStrength:0.35 });
         break;
     }
   }
@@ -136,15 +142,16 @@ window.PLAYER_OBJ = (() => {
     const damage  = window.CHEAT ? 99999 : Math.round((weapon.damage || 12) * (bonus.atk_mult || 1));
     const pattern = weapon.pattern || 'single';
 
-    _spawnPattern(pattern, x, y - 2, color, damage);
+    _spawnPattern(pattern, x, y - 2, color, damage, weapon.bullet_r);
     pattern === 'seek' ? SFX?.shootSeek?.() : SFX?.shoot?.();
   }
 
   function takeDamage(dmg) {
     if (window.CHEAT) return false; // 無敵
     if (invFrames > 0 || !alive) return false;
-    hp -= dmg;
-    invFrames = INV_FRAMES;
+    const reduction = _cm.damage_reduction || 0;
+    hp -= Math.round(dmg * (1 - reduction));
+    invFrames = _cm.inv_frames || INV_FRAMES;
     if (hp <= 0) { hp = 0; alive = false; }
     window.STATE?.setHp?.(hp);
     window.addMutation?.(dmg / effectiveMaxHp * 100);
@@ -260,7 +267,7 @@ window.PLAYER_OBJ = (() => {
     get hp() { return hp; },
     get maxHp() { return MAX_HP; },
     get alive() { return alive; },
-    get radius() { return PLAYER_RADIUS; },
+    get radius() { return _cm.player_radius || PLAYER_RADIUS; },
     init, update, setMouse, takeDamage, render,
   };
 })();

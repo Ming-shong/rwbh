@@ -16,6 +16,9 @@ window.BATTLE = (() => {
   // FPS 計數
   let fpsFrames = 0, fpsLast = 0, fpsCurrent = 0;
 
+  // 傷害數字
+  const damageNumbers = [];
+
   // 背景星點
   const STARS = [];
   function _initStars(cw, ch) {
@@ -26,6 +29,23 @@ window.BATTLE = (() => {
   }
   function _updateStars(ch) { STARS.forEach(s => { s.y += s.speed; if (s.y > ch) s.y = 0; }); }
   function _drawStars() { STARS.forEach(s => { ctx.fillStyle = `rgba(200,220,255,${s.op})`; ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2); ctx.fill(); }); }
+
+  function _drawDamageNumbers() {
+    for (let i = damageNumbers.length - 1; i >= 0; i--) {
+      const dn = damageNumbers[i];
+      const t = 1 - dn.life / dn.maxLife;
+      ctx.save();
+      ctx.globalAlpha = t;
+      ctx.shadowBlur = 6; ctx.shadowColor = '#ffcc00';
+      ctx.fillStyle = '#ffcc00';
+      ctx.font = `bold ${10 + Math.round((1 - t) * 4)}px monospace`;
+      ctx.textAlign = 'center';
+      ctx.fillText(`${dn.val}`, dn.x, dn.y - dn.life * 0.5);
+      ctx.restore();
+      dn.life++;
+      if (dn.life >= dn.maxLife) damageNumbers.splice(i, 1);
+    }
+  }
 
   // 碰撞偵測（含 SFX + VFX）
   function _checkCollisions() {
@@ -40,6 +60,7 @@ window.BATTLE = (() => {
             b.active = false;
             ENEMY.takeMobDamage(mob.id, b.damage);
             VFX.spawnHitSpark(b.x, b.y, b.color);
+            damageNumbers.push({ x: mob.x + (Math.random()-.5)*20, y: mob.y - 16, val: b.damage, life: 0, maxLife: 40 });
             break; // 一顆子彈只打一隻
           }
         }
@@ -55,6 +76,8 @@ window.BATTLE = (() => {
           if (ENEMY.takeDamage(b.damage)) enemiesKilled++;
           VFX.spawnHitSpark(b.x, b.y, b.color);
           SFX.enemyHit();
+          const bp2 = ENEMY.getBossPos();
+          damageNumbers.push({ x: bp2.x + (Math.random()-.5)*30, y: bp2.y - 20, val: b.damage, life: 0, maxLife: 40 });
         }
       }
     }
@@ -189,13 +212,17 @@ window.BATTLE = (() => {
       endScheduled = true;
       VFX.spawnBossDefeat(ENEMY.getBossPos().x, ENEMY.getBossPos().y);
       SFX.victory();
+      const _vlines = window._CUSTOM_LORE?.victory_lines;
+      if (_vlines?.length) window.HUD?.toast?.(_vlines[Math.floor(Math.random()*_vlines.length)], 2500);
 
       const elapsed  = (Date.now() - startTime) / 1000;
       const threat   = poiData?.effective_threat || poiData?.threat || 1;
-      const base     = [8, 18, 35, 70, 140][Math.min(4, threat - 1)];
+      const _bal     = window._CUSTOM_BALANCE?.crystals || {};
+      const _baseArr = _bal.base || {1:8,2:18,3:35,4:70,5:140};
+      const base     = (_baseArr[threat] || _baseArr[String(threat)]) ?? [8,18,35,70,140][Math.min(4, threat-1)];
       const sMult    = Math.max(0.5, Math.min(2.0, threat * 30 / Math.max(elapsed, 1)));
-      const ndMult   = damageTaken === 0 ? 1.5 : 1.0;
-      const crystals = Math.max(1, Math.round(base * sMult * ndMult * (0.8 + Math.random() * 0.4)));
+      const ndMult   = damageTaken === 0 ? (_bal.no_damage_mult ?? 1.5) : 1.0;
+      const crystals = Math.max(1, Math.round(base * sMult * (_bal.speed_bonus_mult ?? 1.0) * ndMult * (0.8 + Math.random() * 0.4)));
       poiData._earnedCrystals = crystals;
       poiData._speedBonus  = sMult > 1.2;
       poiData._noDmgBonus  = damageTaken === 0;
@@ -212,6 +239,8 @@ window.BATTLE = (() => {
       gameState = 'lost';
       endScheduled = true;
       SFX.defeat();
+      const _dlines = window._CUSTOM_LORE?.defeat_lines;
+      if (_dlines?.length) window.HUD?.toast?.(_dlines[Math.floor(Math.random()*_dlines.length)], 2500);
       const resultData = { poi_id: poiData.id, won: false, crystals: 0, damage_taken: damageTaken };
       _showDeathScreen(resultData);
     }
@@ -280,6 +309,7 @@ window.BATTLE = (() => {
     BULLETS.render(ctx);
     ENEMY.render(ctx);
     PLAYER_OBJ.render(ctx);
+    _drawDamageNumbers();
     _drawHUD(cw, ch);
 
     if (gameState === 'won' || gameState === 'lost') {
@@ -291,7 +321,19 @@ window.BATTLE = (() => {
 
   // ── 公開 API ─────────────────────────────────────────────────────────────────
 
-  function start(data) {
+  async function start(data) {
+    // 每次戰鬥開始前重新讀取最新自訂設定
+    try {
+      const r = await fetch('/api/config');
+      const j = await r.json();
+      if (j.ok && j.config) {
+        const c = j.config;
+        if (c.visuals)   window._CUSTOM_VISUALS   = c.visuals;
+        if (c.mechanics) window._CUSTOM_MECHANICS = c.mechanics;
+        if (c.lore)      window._CUSTOM_LORE      = c.lore;
+      }
+    } catch(_) {}
+
     SFX.init();
 
     // 清除上一場殘留的結算計時器、退出按鈕、死亡畫面
@@ -313,6 +355,7 @@ window.BATTLE = (() => {
     poiData      = data;
     startTime    = Date.now();
     damageTaken  = 0;
+    damageNumbers.length = 0;
     gameState    = 'playing';
     endScheduled = false;
     fpsFrames    = 0; fpsLast = 0; fpsCurrent = 0;
