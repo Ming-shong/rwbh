@@ -113,14 +113,15 @@ window.PLAYER_OBJ = (() => {
   }
 
   function _spawnPattern(pattern, ox, oy, color, damage, br) {
-    const r0 = br || 3;
+    const r0  = br || 3;
+    const spd = 11 * (_cm.bullet_speed_mult || 1.0);
     switch (pattern) {
       case 'single':
-        BULLETS.spawn({ x: ox, y: oy - 10, vx: 0, vy: -11, r: r0, damage, team: 'player', color, maxLife: 100 });
+        BULLETS.spawn({ x: ox, y: oy - 10, vx: 0, vy: -spd, r: r0, damage, team: 'player', color, maxLife: 100 });
         break;
       case 'twin':
-        BULLETS.spawn({ x: ox - 8, y: oy - 6, vx: -0.3, vy: -11, r: r0, damage, team: 'player', color, maxLife: 110 });
-        BULLETS.spawn({ x: ox + 8, y: oy - 6, vx:  0.3, vy: -11, r: r0, damage, team: 'player', color, maxLife: 110 });
+        BULLETS.spawn({ x: ox - 8, y: oy - 6, vx: -0.3, vy: -spd, r: r0, damage, team: 'player', color, maxLife: 110 });
+        BULLETS.spawn({ x: ox + 8, y: oy - 6, vx:  0.3, vy: -spd, r: r0, damage, team: 'player', color, maxLife: 110 });
         break;
       case 'spread_5': {
         const angles = [-0.35, -0.17, 0, 0.17, 0.35];
@@ -128,10 +129,15 @@ window.PLAYER_OBJ = (() => {
         break;
       }
       case 'rapid':
-        BULLETS.spawn({ x: ox+(Math.random()-0.5)*4, y: oy-8, vx:(Math.random()-0.5)*0.5, vy:-13, r: br||2, damage, team:'player', color, maxLife:90 });
+        BULLETS.spawn({ x: ox+(Math.random()-0.5)*4, y: oy-8, vx:(Math.random()-0.5)*0.5, vy:-spd*1.18, r: br||2, damage, team:'player', color, maxLife:90 });
         break;
       case 'seek':
         BULLETS.spawn({ x: ox, y: oy-10, vx:0, vy:-8, r: br||4, damage, team:'player', color, maxLife:180, seeking:true, seekStrength:0.35 });
+        break;
+      case 'laser':
+        for (let i = 0; i < 3; i++) {
+          BULLETS.spawn({ x: ox+(i-1)*4, y: oy-10, vx:(i-1)*0.3, vy:-spd*1.4, r: br||2, damage: Math.round(damage/3), team:'player', color, maxLife:60 });
+        }
         break;
     }
   }

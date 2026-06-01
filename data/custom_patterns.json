@@ -3,12 +3,12 @@
     {
       "phase": 1,
       "type": "radial",
-      "count": 12,
-      "speed": 4,
+      "count": 8,
+      "speed": 3,
       "hp_threshold": 1,
       "fire_interval": 60,
       "damage": 10,
-      "r": 16,
+      "r": 8,
       "color": "#ff1a6e",
       "maxLife": 260,
       "trajectory": "straight"
@@ -19,11 +19,11 @@
       "phase": 1,
       "type": "radial",
       "count": 8,
-      "speed": 3,
+      "speed": 3.5,
       "hp_threshold": 1,
       "fire_interval": 55,
-      "damage": 10,
-      "r": 6,
+      "damage": 15,
+      "r": 7,
       "color": "#ff1a6e",
       "maxLife": 260,
       "trajectory": "straight"
@@ -46,12 +46,12 @@
     {
       "phase": 1,
       "type": "radial",
-      "count": 6,
-      "speed": 3,
+      "count": 8,
+      "speed": 4,
       "hp_threshold": 1,
       "fire_interval": 50,
-      "damage": 10,
-      "r": 5,
+      "damage": 15,
+      "r": 8,
       "color": "#ff1a6e",
       "maxLife": 260,
       "trajectory": "straight"
@@ -208,8 +208,7 @@
       "color": "#ff1a6e",
       "maxLife": 300,
       "trajectory": "straight",
-      "movement_type": "figure8",
-      "movement_speed": 0.05
+      "movement_type": "circular"
     }
   ]
 }

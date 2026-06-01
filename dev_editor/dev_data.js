@@ -56,12 +56,16 @@ window.DEV_DEFAULT_VISUALS = {
 };
 
 window.DEV_DEFAULT_WEAPONS = {
-  pulse_gun:{ name:'脈衝槍', description:'標準單發，射速穩定。入門武器。',  damage:12, fire_rate:7,  pattern:'single',   color:'#00f0ff', price:0,   icon:'▷', bullet_r:3, bullet_trail_mult:1.0 },
-  twin:     { name:'雙管炮', description:'左右雙管同步射擊，覆蓋面積增倍。', damage:11, fire_rate:9,  pattern:'twin',     color:'#00d4ff', price:80,  icon:'◈', bullet_r:3, bullet_trail_mult:1.0 },
-  scatter:  { name:'散彈槍', description:'五發散射，短程命中率極高。',       damage:7,  fire_rate:14, pattern:'spread_5', color:'#ffaa00', price:120, icon:'⋯', bullet_r:2.5,bullet_trail_mult:0.8},
-  rapid:    { name:'速射機槍',description:'射速超高，個別傷害低但累積驚人。', damage:5,  fire_rate:3,  pattern:'rapid',    color:'#00ff88', price:150, icon:'≡', bullet_r:2, bullet_trail_mult:0.6 },
-  laser:    { name:'雷射砲', description:'貫穿性高能光束，威力強但需蓄力。', damage:45, fire_rate:30, pattern:'laser',    color:'#ff00ff', price:200, icon:'━', bullet_r:5, bullet_trail_mult:1.5 },
-  seeker:   { name:'追蹤導彈',description:'自動追蹤目標，幾乎不會脫靶。',   damage:18, fire_rate:22, pattern:'seek',     color:'#ff6b35', price:300, icon:'◎', bullet_r:4, bullet_trail_mult:2.0 },
+  // ── 主武器 ──
+  pulse_gun:    { name:'脈衝槍',   description:'標準單發，射速穩定。入門武器。',      damage:12, fire_rate:7,  pattern:'single',   color:'#00f0ff', price:0,   icon:'▷', bullet_r:3,   bullet_trail_mult:1.0, type:'main' },
+  twin:         { name:'雙管炮',   description:'左右雙管同步射擊，覆蓋面積增倍。',    damage:11, fire_rate:9,  pattern:'twin',     color:'#00d4ff', price:80,  icon:'◈', bullet_r:3,   bullet_trail_mult:1.0, type:'main' },
+  scatter:      { name:'散彈槍',   description:'五發散射，短程命中率極高。',          damage:7,  fire_rate:14, pattern:'spread_5', color:'#ffaa00', price:120, icon:'⋯', bullet_r:2.5, bullet_trail_mult:0.8, type:'main' },
+  rapid:        { name:'速射機槍', description:'射速超高，個別傷害低但累積驚人。',    damage:5,  fire_rate:3,  pattern:'rapid',    color:'#00ff88', price:150, icon:'≡', bullet_r:2,   bullet_trail_mult:0.6, type:'main' },
+  laser:        { name:'雷射砲',   description:'貫穿性高能光束，威力強但需蓄力。',    damage:45, fire_rate:30, pattern:'laser',    color:'#ff00ff', price:200, icon:'━', bullet_r:5,   bullet_trail_mult:1.5, type:'main' },
+  seeker:       { name:'追蹤導彈', description:'自動追蹤目標，幾乎不會脫靶。',        damage:18, fire_rate:22, pattern:'seek',     color:'#ff6b35', price:300, icon:'◎', bullet_r:4,   bullet_trail_mult:2.0, type:'main' },
+  // ── 副武器 ──
+  side_cannons: { name:'側翼砲台', description:'裝備在左右兩側，自動向前方補充火力。', damage:8,  fire_rate:12, pattern:'single',   color:'#88ddff', price:100, icon:'⊲', bullet_r:3,   bullet_trail_mult:1.0, type:'sub', sub_position:{type:'both_sides', dist:28} },
+  rear_turret:  { name:'後方砲台', description:'裝備在後方，自動向後方掃射覆蓋盲區。', damage:10, fire_rate:18, pattern:'spread_5', color:'#ff8855', price:180, icon:'▽', bullet_r:2.5, bullet_trail_mult:0.8, type:'sub', sub_position:{type:'angle', angle:180, dist:20} },
 };
 
 window.DEV_DEFAULT_BALANCE = {

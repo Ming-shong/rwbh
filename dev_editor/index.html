@@ -237,7 +237,14 @@ const APP = {
     // 嘗試從 localStorage 載入
     const saved = localStorage.getItem('rwbh_design');
     if (saved) {
-      try { Object.assign(DESIGN, JSON.parse(saved)); this.status('已從 localStorage 還原設計'); } catch(_) {}
+      try {
+        Object.assign(DESIGN, JSON.parse(saved));
+        // 補齊 DEV_DEFAULT_WEAPONS 中有但 localStorage 舊版沒有的武器（例如新增的副武器）
+        for (const [id, w] of Object.entries(DEV_DEFAULT_WEAPONS)) {
+          if (!DESIGN.weapons[id]) DESIGN.weapons[id] = JSON.parse(JSON.stringify(w));
+        }
+        this.status('已從 localStorage 還原設計');
+      } catch(_) {}
     }
 
     // 初始化預覽
@@ -311,6 +318,10 @@ const APP = {
         try {
           const data = JSON.parse(ev.target.result);
           Object.assign(DESIGN, data);
+          // 補齊預設武器中有但舊版檔案沒有的武器
+          for (const [id, w] of Object.entries(DEV_DEFAULT_WEAPONS)) {
+            if (!DESIGN.weapons[id]) DESIGN.weapons[id] = JSON.parse(JSON.stringify(w));
+          }
           localStorage.setItem('rwbh_design', JSON.stringify(DESIGN));
           this.renderTab(currentTab);
           this.status('✓ 設計已載入');
@@ -620,14 +631,17 @@ const TABS = {
 
   // ── 武器管理 ──────────────────────────────────────────────────
   weapon() {
-    const DEFAULT_IDS = ['pulse_gun','twin','scatter','rapid','seeker'];
+    const DEFAULT_IDS = ['pulse_gun','twin','scatter','rapid','laser','seeker','side_cannons','rear_turret'];
     const PATTERNS = ['single','twin','spread_5','rapid','seek'];
     const PATTERN_LABELS = {single:'單發',twin:'雙管',spread_5:'散射',rapid:'速射',seek:'追蹤'};
     const weapons    = DESIGN.weapons;
     const deletedSet = new Set(DESIGN.world?._deleted_weapons || []);
     const editing    = ED._editingWeaponId;
+    const activeTab  = ED._weaponTab || 'main';
 
-    const weaponCards = Object.entries(weapons).map(([id, w]) => {
+    const weaponCards = Object.entries(weapons)
+      .filter(([, w]) => (w.type || 'main') === activeTab)
+      .map(([id, w]) => {
       const isDefault = DEFAULT_IDS.includes(id);
       const isDeleted = deletedSet.has(id);
       const isCustom  = !isDefault;
@@ -702,7 +716,7 @@ const TABS = {
             <div class="weapon-icon" style="color:${w.color}">${w.icon}</div>
             <div class="weapon-info" style="flex:1">
               <div class="weapon-name">${w.name} ${isCustom?'★':''}${isDeleted?' <span style="color:var(--danger);font-size:8px">[刪除中]</span>':''}</div>
-              <div class="weapon-stats">ATK:${w.damage} INT:${w.fire_rate}f ◈${w.price} 子彈r:${w.bullet_r||'—'} 模式:${PATTERN_LABELS[w.pattern]||w.pattern}</div>
+              <div class="weapon-stats">ATK:${w.damage} INT:${w.fire_rate}f ◈${w.price} 子彈r:${w.bullet_r||'—'} 模式:${PATTERN_LABELS[w.pattern]||w.pattern} <span style="color:${w.type==='sub'?'#ffaa00':'#00ccff'};font-weight:bold">[${w.type==='sub'?'副':'主'}]</span></div>
             </div>
             <div class="weapon-actions">
               <button class="ed-btn ${isEditing?'ed-btn-green':'ed-btn-warn'}" style="font-size:8px;padding:3px 7px"
@@ -715,11 +729,19 @@ const TABS = {
         </div>`;
     }).join('');
 
+    const tabStyle = (t) => t === activeTab
+      ? 'background:var(--accent);color:#000;border-color:var(--accent)'
+      : 'background:transparent;color:var(--muted);border-color:var(--border)';
+
     return `
       <div class="section-title">🔫 武器管理</div>
-      <div class="info-box">點「編輯」展開表單直接修改。pulse_gun 為預設武器不可刪除。自訂武器標記為 ★。</div>
+      <div style="display:flex;gap:6px;margin-bottom:10px">
+        <button class="ed-btn" style="${tabStyle('main')};flex:1" onclick="ED._weaponTab='main';ED._editingWeaponId=null;APP.renderTab('weapon')">主武器</button>
+        <button class="ed-btn" style="${tabStyle('sub')};flex:1"  onclick="ED._weaponTab='sub';ED._editingWeaponId=null;APP.renderTab('weapon')">副武器</button>
+      </div>
+      <div class="info-box">${activeTab==='main'?'主武器裝備於槽位 0，每幀自動射擊。pulse_gun 不可刪除。':'副武器裝備於槽位 1，依 sub_position 衛星位置射擊。'} 自訂武器標記為 ★。</div>
       <div style="margin-bottom:10px">
-        <button class="ed-btn ed-btn-accent" onclick="ED.addWeapon()">+ 新增自訂武器</button>
+        <button class="ed-btn ed-btn-accent" onclick="ED.addWeapon()">+ 新增自訂${activeTab==='main'?'主':'副'}武器</button>
       </div>
       ${weaponCards}
     `;
@@ -1409,13 +1431,16 @@ const ED = {
   },
   addWeapon() {
     const id = 'custom_' + Date.now();
-    DESIGN.weapons[id] = { name:'新武器', description:'自訂武器', damage:15, fire_rate:10, pattern:'single', color:'#aa00ff', price:200, icon:'★', bullet_r:4, bullet_trail_mult:1.0, is_custom:true };
+    const isSub = (ED._weaponTab || 'main') === 'sub';
+    DESIGN.weapons[id] = { name:'新武器', description:'自訂武器', damage:15, fire_rate:10, pattern:'single', color:'#aa00ff', price:200, icon:'★', bullet_r:4, bullet_trail_mult:1.0, type: isSub ? 'sub' : 'main', is_custom:true,
+      ...(isSub ? { sub_position:{type:'angle', angle:90, dist:25} } : {}) };
     APP.renderTab('weapon');
     ED._editingWeaponId = id;
     APP.renderTab('weapon');
   },
 
   _editingWeaponId: null,
+  _weaponTab: 'main',
 
   editWeapon(id) {
     // 切換展開/收起
@@ -1560,7 +1585,7 @@ const PREVIEW = {
   damageNumbers: [],
 
   // 玩家射擊
-  playerBullets: [], playerShootTimer: 0, mouseDown: false,
+  playerBullets: [], playerShootTimer: 0, subShootTimer: 0, mouseDown: false,
 
   // 方向箭頭拖移
   _arrowDrag: false, _arrowDragPhase: null, _arrowDragKey: null,
@@ -1597,6 +1622,7 @@ const PREVIEW = {
         if (dx*dx + dy*dy < 400) { this._arrowDrag = true; return; }
       }
       this.mouseDown = true;
+      this.playerShootTimer = 9999; // 點擊立即射出第一顆子彈
     });
     this.canvas.addEventListener('mouseup',    () => { this.mouseDown = false; this._arrowDrag = false; });
     this.canvas.addEventListener('mouseleave', () => { this.mouseDown = false; this._arrowDrag = false; });
@@ -1635,7 +1661,7 @@ const PREVIEW = {
     this.bossY = 70;
     this.wobbleT = 0; this.bossAngle = 0; this.spiralAngle = 0;
     this.shootTimer = 0; this.phaseIdx = 0; this.bossHitFlash = 0;
-    this.bullets = []; this.playerBullets = []; this.playerShootTimer = 0;
+    this.bullets = []; this.playerBullets = []; this.playerShootTimer = 0; this.subShootTimer = 0;
     this.playerHp = this.playerMaxHp = DESIGN.mechanics?.player?.max_hp || 100;
     this.playerInvFrames = 0;
     this.damageNumbers = [];
@@ -1741,6 +1767,48 @@ const PREVIEW = {
     let cur = phases[0];
     for (const p of phases) { if (aliveRatio <= p.hp_threshold) cur = p; }
     return cur;
+  },
+
+  // 與 player.js _subPos 同步：計算副武器衛星位置
+  _subPos(pos) {
+    const sp = pos || { type: 'angle', angle: 90, dist: 25 };
+    const dist = sp.dist || 25;
+    if (sp.type === 'both_sides') {
+      return [{ sx: this.playerX - dist, sy: this.playerY }, { sx: this.playerX + dist, sy: this.playerY }];
+    }
+    const rad = ((sp.angle || 0) * Math.PI) / 180;
+    return [{ sx: this.playerX + Math.sin(rad) * dist, sy: this.playerY - Math.cos(rad) * dist }];
+  },
+
+  // 與 player.js _spawnPattern 同步：5 種射擊 pattern
+  _spawnPlayerPattern(pattern, ox, oy, color, damage, br) {
+    const spd = 12 * (DESIGN.mechanics?.player?.bullet_speed_mult || 1.0);
+    const r0 = br || 4;
+    switch (pattern) {
+      case 'twin':
+        this.playerBullets.push({ x: ox - 8, y: oy - 6, vx: -0.3, vy: -spd, r: r0, color, damage, life: 0, maxLife: 110 });
+        this.playerBullets.push({ x: ox + 8, y: oy - 6, vx:  0.3, vy: -spd, r: r0, color, damage, life: 0, maxLife: 110 });
+        break;
+      case 'spread_5': {
+        const angles = [-0.35, -0.17, 0, 0.17, 0.35];
+        angles.forEach(a => this.playerBullets.push({ x: ox, y: oy - 8, vx: Math.sin(a)*10, vy: -Math.cos(a)*10, r: br||2.5, color, damage, life: 0, maxLife: 80 }));
+        break;
+      }
+      case 'rapid':
+        this.playerBullets.push({ x: ox + (Math.random()-0.5)*4, y: oy - 8, vx: (Math.random()-0.5)*0.5, vy: -13, r: br||2, color, damage, life: 0, maxLife: 90 });
+        break;
+      case 'seek':
+        this.playerBullets.push({ x: ox, y: oy - 10, vx: 0, vy: -8, r: br||4, color, damage, life: 0, maxLife: 180, seeking: true, seekStrength: 0.35 });
+        break;
+      case 'laser':
+        // 貫穿光束：細長高速子彈，maxLife 短（快速穿越）
+        for (let i = 0; i < 3; i++) {
+          this.playerBullets.push({ x: ox + (i-1)*4, y: oy - 10, vx: (i-1)*0.3, vy: -spd * 1.4, r: br||2, color, damage: Math.round(damage/3), life: 0, maxLife: 60 });
+        }
+        break;
+      default: // single
+        this.playerBullets.push({ x: ox, y: oy - 10, vx: 0, vy: -spd, r: r0, color, damage, life: 0, maxLife: 100 });
+    }
   },
 
   setForcedPhase(n) {
@@ -1873,7 +1941,8 @@ const PREVIEW = {
       if (this.playerInvFrames === 0) {
         const dx = b.x - this.playerX, dy = b.y - this.playerY;
         if (dx*dx + dy*dy < (pRadius + b.r) ** 2) {
-          const dmg = Math.round(b.damage || 10);
+          const _dr = (DESIGN.mechanics?.player?.damage_reduction || 0) / 100;
+          const dmg = Math.round((b.damage || 10) * (1 - _dr));
           this.playerHp = Math.max(0, this.playerHp - dmg);
           this.playerInvFrames = invFrm;
           this.damageNumbers.push({ x: this.playerX, y: this.playerY - 20, val: dmg, life: 0, maxLife: 45 });
@@ -2060,44 +2129,95 @@ const PREVIEW = {
     this.playerX = Math.max(16, Math.min(cw-16, this.playerX));
     this.playerY = Math.max(ch * 0.2, Math.min(ch - 30, this.playerY));
 
-    // 玩家渲染（無敵幀閃爍）
+    // 副武器衛星視覺（與 player.js render() 行 162 同步）
+    const _wpnRender = DESIGN.weapons?.[this.activeWeaponId] || {};
+    if (_wpnRender.type === 'sub') {
+      const subPositions = this._subPos(_wpnRender.sub_position);
+      const subCol = _wpnRender.color || '#88ddff';
+      subPositions.forEach(({ sx, sy }) => {
+        this.ctx.save();
+        this.ctx.shadowBlur = 10; this.ctx.shadowColor = subCol;
+        this.ctx.fillStyle = subCol;
+        this.ctx.globalAlpha = 0.85;
+        this.ctx.beginPath(); this.ctx.arc(sx, sy, 5, 0, Math.PI * 2); this.ctx.fill();
+        this.ctx.globalAlpha = 0.3;
+        this.ctx.beginPath(); this.ctx.arc(sx, sy, 9, 0, Math.PI * 2); this.ctx.fill();
+        this.ctx.restore();
+      });
+    }
+
+    // 玩家渲染（無敵幀閃爍），與 player.js render() 同步
     const showPlayer = !(this.playerInvFrames > 0 && Math.floor(this.playerInvFrames / 5) % 2 === 0);
     if (showPlayer) {
       const pv = visuals.player || {};
-      const pc = pv.hull_color_mode === 'fixed' ? (pv.hull_fixed_color||'#00f0ff') : '#00f0ff';
+      const _wpnCol = (DESIGN.weapons?.[this.activeWeaponId] || DESIGN.weapons?.['pulse_gun'] || {}).color || '#00f0ff';
+      const pc = pv.hull_color_mode === 'fixed' ? (pv.hull_fixed_color || '#00f0ff') : (_wpnCol);
       const pglow = pv.glow_color || pc;
+      const cockpitCol = pv.cockpit_color || 'rgba(0,20,40,0.6)';
+      const coreCol    = pv.core_color    || '#ffffff';
+      const px = this.playerX, py = this.playerY;
+      const shapePreset = pv.shape_preset || 'default';
       this.ctx.save();
       this.ctx.shadowBlur = pv.glow_intensity||24; this.ctx.shadowColor = pglow;
       this.ctx.fillStyle = pc;
       this.ctx.beginPath();
-      this.ctx.moveTo(this.playerX, this.playerY-16);
-      this.ctx.lineTo(this.playerX-11, this.playerY+10);
-      this.ctx.lineTo(this.playerX-4, this.playerY+4);
-      this.ctx.lineTo(this.playerX, this.playerY+7);
-      this.ctx.lineTo(this.playerX+4, this.playerY+4);
-      this.ctx.lineTo(this.playerX+11, this.playerY+10);
+      if      (shapePreset === 'arrow')  { this.ctx.moveTo(px,py-18); this.ctx.lineTo(px-7,py+12); this.ctx.lineTo(px,py+2);  this.ctx.lineTo(px+7,py+12); }
+      else if (shapePreset === 'wedge')  { this.ctx.moveTo(px,py-14); this.ctx.lineTo(px-14,py+10); this.ctx.lineTo(px,py+4); this.ctx.lineTo(px+14,py+10); }
+      else if (shapePreset === 'delta')  { this.ctx.moveTo(px,py-16); this.ctx.lineTo(px-13,py+12); this.ctx.lineTo(px+13,py+12); }
+      else if (shapePreset === 'wide')   { this.ctx.moveTo(px,py-12); this.ctx.lineTo(px-16,py+8); this.ctx.lineTo(px-8,py+4); this.ctx.lineTo(px,py+10); this.ctx.lineTo(px+8,py+4); this.ctx.lineTo(px+16,py+8); }
+      else { this.ctx.moveTo(px,py-16); this.ctx.lineTo(px-11,py+10); this.ctx.lineTo(px-4,py+4); this.ctx.lineTo(px,py+7); this.ctx.lineTo(px+4,py+4); this.ctx.lineTo(px+11,py+10); }
       this.ctx.closePath(); this.ctx.fill();
-      this.ctx.fillStyle='rgba(0,20,40,.6)'; this.ctx.beginPath(); this.ctx.moveTo(this.playerX,this.playerY-8); this.ctx.lineTo(this.playerX-5,this.playerY+5); this.ctx.lineTo(this.playerX+5,this.playerY+5); this.ctx.closePath(); this.ctx.fill();
-      this.ctx.fillStyle='#fff'; this.ctx.shadowBlur=8; this.ctx.shadowColor='#fff'; this.ctx.beginPath(); this.ctx.arc(this.playerX,this.playerY-2,2.5,0,Math.PI*2); this.ctx.fill();
+      // 駕駛艙
+      this.ctx.fillStyle = cockpitCol;
+      this.ctx.beginPath(); this.ctx.moveTo(px,py-8); this.ctx.lineTo(px-5,py+5); this.ctx.lineTo(px+5,py+5); this.ctx.closePath(); this.ctx.fill();
+      // 核心光點
+      this.ctx.fillStyle = coreCol; this.ctx.shadowBlur=8; this.ctx.shadowColor=coreCol;
+      this.ctx.beginPath(); this.ctx.arc(px,py-2,2.5,0,Math.PI*2); this.ctx.fill();
       this.ctx.restore();
     }
 
-    // ── 玩家射擊（使用選中武器屬性）─────────────────────────────
+    // ── 玩家射擊（與 player.js 同步：自動射擊，主/副武器獨立計時）──
     const _wpn = DESIGN.weapons?.[this.activeWeaponId] || DESIGN.weapons?.['pulse_gun'] || {};
-    const pFireRate = _wpn.fire_rate ?? DESIGN.mechanics?.player?.fire_rate ?? 7;
-    const pAtk = (DESIGN.mechanics?.player?.base_atk || 12);
-    const pBulletSpd = 12 * (DESIGN.mechanics?.player?.bullet_speed_mult || 1.0);
-    const pBColor = _wpn.color || '#00f0ff';
-    const pBR = _wpn.bullet_r || 4;
-    if (this.mouseDown) {
+    // 主武器
+    if (!_wpn.type || _wpn.type === 'main') {
+      const pFireRate = _wpn.fire_rate ?? 7;
       this.playerShootTimer++;
       if (this.playerShootTimer >= pFireRate) {
         this.playerShootTimer = 0;
-        this.playerBullets.push({ x: this.playerX, y: this.playerY - 16, vx: 0, vy: -pBulletSpd, r: pBR, color: pBColor, damage: pAtk, life: 0, maxLife: 120 });
+        this._spawnPlayerPattern(_wpn.pattern || 'single', this.playerX, this.playerY - 2, _wpn.color || '#00f0ff', _wpn.damage || 12, _wpn.bullet_r);
+      }
+    }
+    // 副武器
+    if (_wpn.type === 'sub') {
+      const subFireRate = _wpn.fire_rate ?? 12;
+      this.subShootTimer++;
+      if (this.subShootTimer >= subFireRate) {
+        this.subShootTimer = 0;
+        const positions = this._subPos(_wpn.sub_position);
+        positions.forEach(({ sx, sy }) => {
+          this._spawnPlayerPattern(_wpn.pattern || 'single', sx, sy, _wpn.color || '#88ddff', _wpn.damage || 8, _wpn.bullet_r);
+        });
       }
     }
     // 更新玩家子彈 + 碰撞 boss/mob
     this.playerBullets = this.playerBullets.filter(pb => {
+      // seek 追蹤最近目標
+      if (pb.seeking) {
+        let tx = null, ty = null;
+        if (this.poi?.type === 'boss' && this.bossHp > 0) { tx = this.bossX; ty = this.bossY; }
+        else if (this.poi?.type === 'mob') {
+          const alive = this.mobList.filter(m => !m.dead);
+          if (alive.length) { const t = alive[0]; tx = t.x; ty = t.y; }
+        }
+        if (tx !== null) {
+          const dx = tx - pb.x, dy = ty - pb.y;
+          const len = Math.sqrt(dx*dx + dy*dy) || 1;
+          pb.vx += (dx/len) * pb.seekStrength;
+          pb.vy += (dy/len) * pb.seekStrength;
+          const spd = Math.sqrt(pb.vx*pb.vx + pb.vy*pb.vy);
+          if (spd > 10) { pb.vx = pb.vx/spd*10; pb.vy = pb.vy/spd*10; }
+        }
+      }
       pb.x += pb.vx; pb.y += pb.vy; pb.life++;
       if (pb.life >= pb.maxLife || pb.y < -20) return false;
       // 碰撞 Boss

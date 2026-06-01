@@ -25,6 +25,19 @@
 
 先從上面四個 map 查找，確認找不到再用 Grep 定位。
 
+## 從原始程式碼查找後（新規則）
+
+**若在 memory 中找不到答案，改用 Grep / Read 直接查原始碼後，必須將找到的資訊補回對應的記憶檔：**
+
+| 找到的內容 | 補回目標 |
+|-----------|---------|
+| 函式定義、行號、輸入輸出 | `project_map.md` 或 `dev_editor_map.md` |
+| 變數名稱、位置、用途 | `variables.md` |
+| 資料流路徑 | `data_pipeline.md` |
+| 規格/行為細節 | `dev_editor_spec.md` 或 `game_systems.md` |
+
+> 目的：第一次找完後，下次同樣的問題直接查 memory 即可，不再重複讀原始碼。
+
 ## dev_editor ↔ 伺服器雙向同步原則
 
 **每次修改 dev_editor 的邏輯，必須同步更新伺服器版本；反之亦然。**
