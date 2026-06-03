@@ -24,8 +24,9 @@ map.on("mousemove", e => {
   document.getElementById("coord-lng").textContent = "LNG " + e.latlng.lng.toFixed(5);
 });
 map.on("click", e => {
-  if (window.GPS_ACTIVE) return;
+  if (!window.CHEAT) return;
   STATE.setPlayerPos(e.latlng.lat, e.latlng.lng);
+  window.HUD?.toast?.("⚡ 作弊瞬移", 800);
   // 玩家移動後清除所有路線
   _clearAllRoutes();
 });

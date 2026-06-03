@@ -376,7 +376,31 @@ window.BATTLE = (() => {
       });
     }
 
-    canvas.onmousemove = e => PLAYER_OBJ.setMouse(e.clientX, e.clientY);
+    canvas.onmousemove  = e => PLAYER_OBJ.setMouse(e.clientX, e.clientY);
+    canvas.onmousedown  = e => { if (e.button === 0) window._battleMouseHeld = true; };
+    canvas.onmouseup    = e => { if (e.button === 0) window._battleMouseHeld = false; };
+    canvas.onmouseleave = () => { window._battleMouseHeld = false; };
+
+    window._cheatFireDown = false;
+    canvas.onmousedown = e => {
+      if (e.button === 2 && window.CHEAT) window._cheatFireDown = true;
+    };
+    canvas.onmouseup = e => {
+      if (e.button === 2) window._cheatFireDown = false;
+    };
+
+    canvas.oncontextmenu = e => {
+      e.preventDefault();
+      if (!window.CHEAT || gameState !== 'playing') return;
+      const mode = ENEMY.getMode();
+      if (mode === 'boss') {
+        const maxHp = ENEMY.getMaxHP();
+        ENEMY.takeDamage(Math.ceil(maxHp * 0.1));
+      } else {
+        const aliveMob = ENEMY.getMobs().find(m => m.alive);
+        if (aliveMob) ENEMY.takeMobDamage(aliveMob.id, aliveMob.hp + 1);
+      }
+    };
 
 
     window._battleEsc = e => {
@@ -404,7 +428,9 @@ window.BATTLE = (() => {
     const deathEl = document.getElementById('battle-death-screen');
     if (deathEl) deathEl.style.display = 'none';
     window.DEATH_RESTART = null;
-    if (canvas) canvas.onmousemove = null;
+    if (canvas) { canvas.onmousemove = null; canvas.onmousedown = null; canvas.onmouseup = null; canvas.onmouseleave = null; canvas.oncontextmenu = null; }
+    window._battleMouseHeld = false;
+    window._cheatFireDown = false;
     // 清空 canvas，避免殘留畫面在下次淡入時出現
     if (canvas && ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
   }

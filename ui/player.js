@@ -49,11 +49,14 @@ window.PLAYER_OBJ = (() => {
     const relicBonus = window.RELICS?.getBonus?.() || {};
     const fireRateMult = relicBonus.fire_rate_mult || 1;
 
+    // 作弊模式：只有按住左鍵時才射擊
+    const _shootEnabled = !window.CHEAT || window._battleMouseHeld;
+
     // 主武器
     const weapon   = INVENTORY.getActiveWeapon();
     const interval = Math.max(1, Math.round((weapon.fire_rate || 7) * fireRateMult));
     shootTimer++;
-    if (shootTimer >= interval) {
+    if (_shootEnabled && shootTimer >= interval) {
       shootTimer = 0;
       _shoot(weapon);
     }
@@ -63,7 +66,7 @@ window.PLAYER_OBJ = (() => {
     if (subWeapon) {
       const subInterval = Math.max(1, Math.round((subWeapon.fire_rate || 12) * fireRateMult));
       subShootTimer++;
-      if (subShootTimer >= subInterval) {
+      if (_shootEnabled && subShootTimer >= subInterval) {
         subShootTimer = 0;
         _shootSub(subWeapon);
       }

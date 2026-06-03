@@ -17,9 +17,15 @@ RWBH 後端入口（Phase 2–6 + Favorites + Dev Editor）。
   GET  /                      → 前端頁面
 """
 
+import os
+import sys
 import json
 from pathlib import Path
 from flask import Flask, jsonify, request, send_from_directory, Response
+
+# PyInstaller 打包後，資源檔放在 sys._MEIPASS；開發環境直接用當前目錄
+BASE_DIR = Path(getattr(sys, '_MEIPASS', Path(__file__).parent))
+os.chdir(BASE_DIR)  # 確保相對路徑從正確位置解析
 from flask_cors import CORS
 
 from map_system.nominatim    import geocode, search_pois
@@ -317,8 +323,12 @@ def static_files(filename):
 # ── 啟動 ──────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
+    import threading, webbrowser
     print("=" * 50)
     print("  RWBH Phase 2–6 — 後端啟動")
     print("  http://localhost:5000")
     print("=" * 50)
+    # debug=True 會 fork 子程序，只在主程序開啟瀏覽器
+    if os.environ.get("WERKZEUG_RUN_MAIN") != "true":
+        threading.Timer(1.2, lambda: webbrowser.open("http://localhost:5000")).start()
     app.run(host="0.0.0.0", port=5000, debug=True)
